@@ -27,6 +27,7 @@ foreach_stat        : FOR name (COMMA name)? IN expr (COLON)? stat
 break_stat          : BREAK
 continue_stat       : CONTINUE
 print_stat          : PRINT expr_list
+                    | PRINT LPAREN expr_list RPAREN
 assign_stat         : lvalue_expr (COMMA lvalue_expr)* ASSIGN expr_list
 compoundassign_stat : lvalue_expr compoundassign expr
 

@@ -30,26 +30,32 @@ class ErrorInfo:
     # semantic error
 
     @staticmethod
-    def id_duplicate_defined(item):
-        return f'identifier `{item}` duplicate defined'
+    def name_duplicate_defined(item):
+        return f'name `{item}` duplicate defined'
 
     @staticmethod
-    def id_not_defined(item):
-        return f'identifier `{item}` not defined'
+    def name_not_defined(item):
+        return f'name `{item}` not defined'
 
     @staticmethod
-    def id_not_callable(item):
-        return f'identifier `{item}` not a procedure/function'
+    def name_not_callable(item):
+        return f'name `{item}` not a procedure/function'
 
     @staticmethod
     def wrong_arguments_call(item):
         return f'wrong argument number in call `{item}`'
 
+    @staticmethod
     def invalid_break():
         return 'break outside of loop'
 
+    @staticmethod
     def invalid_continue():
         return 'continue outside of loop'
+
+    @staticmethod
+    def name_not_assignable(item):
+        return f'name `{item}` is not assignable'
 
     # intepreter error
 

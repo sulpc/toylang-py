@@ -1,6 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 toylang ast define
+
+name style:
+- `.*stat`: a Stat ast
+- `.*expr`: a Expr ast
+- `.*stats`: a list of Stat ast
+- `.*exprs`: a list of Expr ast
+- `.*name`: a Name ast
+- `value`: a value
+- `identifier`: a string identifier
 """
 
 from toytoken import *
@@ -26,23 +35,23 @@ class BlockStat(AST):
 
 
 class VarDeclStat(AST):
-    def __init__(self, vars, exprs, position):
-        self.vars = vars
+    def __init__(self, names, exprs, position):
+        self.names = names
         self.exprs = exprs
         self.position = position
 
 
 class IfStat(AST):
-    def __init__(self, conds, stats, position):
-        self.conds = conds
+    def __init__(self, cond_exprs, stats, position):
+        self.cond_exprs = cond_exprs
         self.stats = stats
         self.position = position
 
 
 class SwitchStat(AST):
-    def __init__(self, expr, cases, stats, position):
+    def __init__(self, expr, case_exprs, stats, position):
         self.expr = expr
-        self.cases = cases
+        self.case_exprs = case_exprs
         self.stats = stats
         self.position = position
 
@@ -120,14 +129,14 @@ class SelectExpr(AST):
 
 
 class BinOpExpr(AST):
-    def __init__(self, operator, left, right, position):
+    def __init__(self, operator, left_expr, right_expr, position):
         """BinOpExpr
 
         operator is like TokenType.EQ, ...
         """
         self.operator = operator
-        self.left = left
-        self.right = right
+        self.left_expr = left_expr
+        self.right_expr = right_expr
         self.position = position
 
 
@@ -139,8 +148,8 @@ class UniOpExpr(AST):
 
 
 class Name(AST):
-    def __init__(self, name, position):
-        self.name = name
+    def __init__(self, identifier, position):
+        self.identifier = identifier
         self.position = position
 
 

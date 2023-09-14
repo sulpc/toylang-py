@@ -35,11 +35,10 @@ class Displayer(AstNodeVistor):
 
     def visit_VarDeclStat(self, node: VarDeclStat):
         data = {'name': 'decl', 'children': []}
-
-        vars = {'name': 'vars', 'children': []}
-        for var in node.vars:
-            vars['children'].append(self.visit(var))
-        data['children'].append(vars)
+        names = {'name': 'names', 'children': []}
+        for name in node.names:
+            names['children'].append(self.visit(name))
+        data['children'].append(names)
 
         if node.exprs is not None:
             values = {'name': 'values', 'children': []}
@@ -50,14 +49,14 @@ class Displayer(AstNodeVistor):
 
     def visit_IfStat(self, node: IfStat):
         data = {'name': 'if', 'children': []}
-        for cond, stat in zip(node.conds, node.stats):
+        for cond, stat in zip(node.cond_exprs, node.stats):
             data['children'].append({'name': 'cond', 'children': [self.visit(cond), self.visit(stat)]})
         return data
 
     def visit_SwitchStat(self, node: SwitchStat):
         data = {'name': 'switch', 'children': []}
         data['children'].append({'name': 'expr', 'children': [self.visit(node.expr)]})
-        for case, stat in zip(node.cases, node.stats):
+        for case, stat in zip(node.case_exprs, node.stats):
             data['children'].append({'name': 'case', 'children': [self.visit(case), self.visit(stat)]})
         return data
 
@@ -75,7 +74,7 @@ class Displayer(AstNodeVistor):
 
     def visit_ForloopStat(self, node: ForloopStat):
         data = {'name': 'forloop', 'children': []}
-        data['children'].append({'name': 'var', 'children': [self.visit(node.var_name)]})
+        data['children'].append({'name': 'idx', 'children': [self.visit(node.var_name)]})
 
         rg = {'name': 'range', 'children': []}
         rg['children'].append({'name': 'start', 'children': [self.visit(node.start_expr)]})
@@ -90,11 +89,11 @@ class Displayer(AstNodeVistor):
     def visit_ForeachStat(self, node: ForeachStat):
         data = {'name': 'foreach', 'children': []}
 
-        vars = {'name': 'vars', 'children': []}
-        vars['children'].append(self.visit(node.key_name))
+        kv = {'name': 'k/v', 'children': []}
+        kv['children'].append(self.visit(node.key_name))
         if node.val_name is not None:
-            vars['children'].append(self.visit(node.val_name))
-        data['children'].append(vars)
+            kv['children'].append(self.visit(node.val_name))
+        data['children'].append(kv)
 
         data['children'].append({'name': 'in', 'children': [self.visit(node.expr)]})
         data['children'].append({'name': 'do', 'children': [self.visit(node.stat)]})
@@ -116,14 +115,14 @@ class Displayer(AstNodeVistor):
 
     def visit_AssignStat(self, node: AssignStat):
         data = {'name': '=', 'children': []}
-        left = {'name': 'left', 'children': []}
-        right = {'name': 'right', 'children': []}
+        lexprs = {'name': 'lexprs', 'children': []}
+        rexprs = {'name': 'rexprs', 'children': []}
         for expr in node.left_exprs:
-            left['children'].append(self.visit(expr))
+            lexprs['children'].append(self.visit(expr))
         for expr in node.right_exprs:
-            right['children'].append(self.visit(expr))
-        data['children'].append(left)
-        data['children'].append(right)
+            rexprs['children'].append(self.visit(expr))
+        data['children'].append(lexprs)
+        data['children'].append(rexprs)
         return data
 
     def visit_CompoundAssignStat(self, node: CompoundAssignStat):
@@ -141,8 +140,8 @@ class Displayer(AstNodeVistor):
 
     def visit_BinOpExpr(self, node: BinOpExpr):
         data = {'name': f'{node.operator.value}', 'children': []}
-        data['children'].append(self.visit(node.left))
-        data['children'].append(self.visit(node.right))
+        data['children'].append(self.visit(node.left_expr))
+        data['children'].append(self.visit(node.right_expr))
         return data
 
     def visit_UniOpExpr(self, node: UniOpExpr):
@@ -151,7 +150,7 @@ class Displayer(AstNodeVistor):
         return data
 
     def visit_Name(self, node: Name):
-        data = {'name': f'{node.name}'}
+        data = {'name': f'{node.identifier}'}
         return data
 
     def visit_Num(self, node: Num):
