@@ -13,8 +13,9 @@ LOCAL_ECHARTS = False
 
 
 class Displayer(AstNodeVistor):
-    def __init__(self, tree):
+    def __init__(self, tree, filename):
         self.tree = tree
+        self.filename = filename
 
     def visit_Program(self, node: Program):
         data = {'name': 'Program', 'children': []}
@@ -22,28 +23,29 @@ class Displayer(AstNodeVistor):
             data['children'].append(self.visit(stat))
         return data
 
-    def visit_AssignStat(self, node: AssignStat):
-        data = {'name': '=', 'children': []}
-        left = {'name': 'left', 'children': []}
-        right = {'name': 'right', 'children': []}
-        for var in node.vars:
-            left['children'].append(self.visit(var))
-        for expr in node.exprs:
-            right['children'].append(self.visit(expr))
-        data['children'].append(left)
-        data['children'].append(right)
-        return data
-
-    def visit_CompoundAssignStat(self, node: CompoundAssignStat):
-        data = {'name': f'{node.op_type.value}', 'children': []}
-        data['children'].append(self.visit(node.var))
-        data['children'].append(self.visit(node.expr))
+    def visit_EmptyStat(self, node: EmptyStat):
+        data = {'name': 'empty'}
         return data
 
     def visit_BlockStat(self, node: BlockStat):
         data = {'name': 'block', 'children': []}
         for stat in node.stats:
             data['children'].append(self.visit(stat))
+        return data
+
+    def visit_VarDeclStat(self, node: VarDeclStat):
+        data = {'name': 'decl', 'children': []}
+
+        vars = {'name': 'vars', 'children': []}
+        for var in node.vars:
+            vars['children'].append(self.visit(var))
+        data['children'].append(vars)
+
+        if node.exprs is not None:
+            values = {'name': 'values', 'children': []}
+            for expr in node.exprs:
+                values['children'].append(self.visit(expr))
+            data['children'].append(values)
         return data
 
     def visit_IfStat(self, node: IfStat):
@@ -73,11 +75,11 @@ class Displayer(AstNodeVistor):
 
     def visit_ForloopStat(self, node: ForloopStat):
         data = {'name': 'forloop', 'children': []}
-        data['children'].append({'name': 'identifier', 'children': [self.visit(node.identifier)]})
+        data['children'].append({'name': 'var', 'children': [self.visit(node.var_name)]})
 
         rg = {'name': 'range', 'children': []}
         rg['children'].append({'name': 'start', 'children': [self.visit(node.start_expr)]})
-        rg['children'].append({'name': 'end', 'children': [self.visit(node.stop_expr)]})
+        rg['children'].append({'name': 'end', 'children': [self.visit(node.end_expr)]})
         if node.step_expr is not None:
             rg['children'].append({'name': 'step', 'children': [self.visit(node.step_expr)]})
         data['children'].append(rg)
@@ -88,11 +90,11 @@ class Displayer(AstNodeVistor):
     def visit_ForeachStat(self, node: ForeachStat):
         data = {'name': 'foreach', 'children': []}
 
-        ids = {'name': 'identifiers', 'children': []}
-        ids['children'].append(self.visit(node.key_id))
-        if node.value_id is not None:
-            ids['children'].append(self.visit(node.value_id))
-        data['children'].append(ids)
+        vars = {'name': 'vars', 'children': []}
+        vars['children'].append(self.visit(node.key_name))
+        if node.val_name is not None:
+            vars['children'].append(self.visit(node.val_name))
+        data['children'].append(vars)
 
         data['children'].append({'name': 'in', 'children': [self.visit(node.expr)]})
         data['children'].append({'name': 'do', 'children': [self.visit(node.stat)]})
@@ -112,8 +114,22 @@ class Displayer(AstNodeVistor):
             data['children'].append(self.visit(expr))
         return data
 
-    def visit_EmptyStat(self, node: EmptyStat):
-        data = {'name': 'empty'}
+    def visit_AssignStat(self, node: AssignStat):
+        data = {'name': '=', 'children': []}
+        left = {'name': 'left', 'children': []}
+        right = {'name': 'right', 'children': []}
+        for expr in node.left_exprs:
+            left['children'].append(self.visit(expr))
+        for expr in node.right_exprs:
+            right['children'].append(self.visit(expr))
+        data['children'].append(left)
+        data['children'].append(right)
+        return data
+
+    def visit_CompoundAssignStat(self, node: CompoundAssignStat):
+        data = {'name': f'{node.operator.value}', 'children': []}
+        data['children'].append(self.visit(node.left_expr))
+        data['children'].append(self.visit(node.right_expr))
         return data
 
     def visit_SelectExpr(self, node: SelectExpr):
@@ -123,15 +139,19 @@ class Displayer(AstNodeVistor):
         data['children'].append(self.visit(node.expr2))
         return data
 
+    def visit_BinOpExpr(self, node: BinOpExpr):
+        data = {'name': f'{node.operator.value}', 'children': []}
+        data['children'].append(self.visit(node.left))
+        data['children'].append(self.visit(node.right))
+        return data
+
     def visit_UniOpExpr(self, node: UniOpExpr):
-        data = {'name': f'{node.op_type.value}', 'children': []}
+        data = {'name': f'{node.operator.value}', 'children': []}
         data['children'].append(self.visit(node.expr))
         return data
 
-    def visit_BinOpExpr(self, node: BinOpExpr):
-        data = {'name': f'{node.op_type.value}', 'children': []}
-        data['children'].append(self.visit(node.left))
-        data['children'].append(self.visit(node.right))
+    def visit_Name(self, node: Name):
+        data = {'name': f'{node.name}'}
         return data
 
     def visit_Num(self, node: Num):
@@ -148,10 +168,6 @@ class Displayer(AstNodeVistor):
 
     def visit_Null(self, node: Null):
         data = {'name': f'null'}
-        return data
-
-    def visit_Identifier(self, node: Identifier):
-        data = {'name': f'{node.value}'}
         return data
 
     def display(self):
@@ -177,6 +193,6 @@ class Displayer(AstNodeVistor):
             content[4] = '    <title>Tree</title>\n'
             if LOCAL_ECHARTS:
                 content[5] = '    <script type="text/javascript" src="../../echarts.min.js"></script>\n'
-        with open('Tree.html', 'w') as fout:
+        with open(f'{self.filename}', 'w') as fout:
             fout.writelines(content)
         os.remove('html')

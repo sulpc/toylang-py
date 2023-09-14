@@ -42,8 +42,14 @@ class ErrorInfo:
         return f'identifier `{item}` not a procedure/function'
 
     @staticmethod
-    def wrong_arguments_num(item):
-        return f'wrong argument number in procedure `{item}` call'
+    def wrong_arguments_call(item):
+        return f'wrong argument number in call `{item}`'
+
+    def invalid_break():
+        return 'break outside of loop'
+
+    def invalid_continue():
+        return 'continue outside of loop'
 
     # intepreter error
 

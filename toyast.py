@@ -10,29 +10,25 @@ class AST:
     pass
 
 
+class EmptyStat(AST):
+    pass
+
+
 class Program(AST):
     def __init__(self, stats):
         self.stats = stats
 
 
-class AssignStat(AST):
-    def __init__(self, vars, exprs, position):
-        self.vars = vars
-        self.exprs = exprs
-        self.position = position
-
-
-class CompoundAssignStat(AST):
-    def __init__(self, op_type, var, expr, position):
-        self.op_type = op_type
-        self.var = var
-        self.expr = expr
-        self.position = position
-
-
 class BlockStat(AST):
     def __init__(self, stats, position):
         self.stats = stats
+        self.position = position
+
+
+class VarDeclStat(AST):
+    def __init__(self, vars, exprs, position):
+        self.vars = vars
+        self.exprs = exprs
         self.position = position
 
 
@@ -66,19 +62,19 @@ class WhileStat(AST):
 
 
 class ForloopStat(AST):
-    def __init__(self, identifier, start_expr, stop_expr, step_expr, stat, position):
-        self.identifier = identifier
+    def __init__(self, var_name, start_expr, end_expr, step_expr, stat, position):
+        self.var_name = var_name
         self.start_expr = start_expr
-        self.stop_expr = stop_expr
+        self.end_expr = end_expr
         self.step_expr = step_expr
         self.stat = stat
         self.position = position
 
 
 class ForeachStat(AST):
-    def __init__(self, key_id, value_id, expr, stat, position):
-        self.key_id = key_id
-        self.value_id = value_id
+    def __init__(self, key_name, val_name, expr, stat, position):
+        self.key_name = key_name
+        self.val_name = val_name
         self.expr = expr
         self.stat = stat
         self.position = position
@@ -100,8 +96,19 @@ class PrintStat(AST):
         self.position = position
 
 
-class EmptyStat(AST):
-    pass
+class AssignStat(AST):
+    def __init__(self, left_exprs, right_exprs, position):
+        self.left_exprs = left_exprs
+        self.right_exprs = right_exprs
+        self.position = position
+
+
+class CompoundAssignStat(AST):
+    def __init__(self, operator, left_expr, right_expr, position):
+        self.operator = operator
+        self.left_expr = left_expr
+        self.right_expr = right_expr
+        self.position = position
 
 
 class SelectExpr(AST):
@@ -112,18 +119,28 @@ class SelectExpr(AST):
         self.position = position
 
 
+class BinOpExpr(AST):
+    def __init__(self, operator, left, right, position):
+        """BinOpExpr
+
+        operator is like TokenType.EQ, ...
+        """
+        self.operator = operator
+        self.left = left
+        self.right = right
+        self.position = position
+
+
 class UniOpExpr(AST):
-    def __init__(self, op_type, expr, position):
-        self.op_type = op_type
+    def __init__(self, operator, expr, position):
+        self.operator = operator
         self.expr = expr
         self.position = position
 
 
-class BinOpExpr(AST):
-    def __init__(self, op_type, left, right, position):
-        self.op_type = op_type
-        self.left = left
-        self.right = right
+class Name(AST):
+    def __init__(self, name, position):
+        self.name = name
         self.position = position
 
 
@@ -149,11 +166,6 @@ class Null(AST):
     def __init__(self, position):
         self.position = position
 
-
-class Identifier(AST):
-    def __init__(self, value, position):
-        self.value = value
-        self.position = position
 
 
 class AstNodeVistor():

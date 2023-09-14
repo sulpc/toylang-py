@@ -1,8 +1,8 @@
 program             : stat_list
 stat_list           : (stat)+
-stat                : assign_stat
-                    | compoundassign_stat
+stat                : empty_stat
                     | block_stat
+                    | var_decl_stat
                     | if_stat
                     | switch_stat
                     | repeat_stat
@@ -12,27 +12,29 @@ stat                : assign_stat
                     | break_stat
                     | continue_stat
                     | print_stat
-                    | empty_stat
+                    | assign_stat
+                    | compoundassign_stat
 
-assign_stat         : var_list ASSIGN expr_list
-compoundassign_stat : var compoundassign expr
+empty_stat          : SEMI
 block_stat          : LBRACE stat_list RBRACE
+var_decl_stat       : VAR name_list (ASSIGN expr_list)?
 if_stat             : IF expr (COLON)? stat (ELIF expr (COLON)? stat)* (ELSE (COLON)? stat)?
 switch_stat         : SWITCH expr (COLON)? (CASE expr (COLON)? stat)+ (DEFAULT (COLON)? stat)?
 repeat_stat         : REPEAT (COLON)? stat UNTIL expr
 while_stat          : WHILE expr (COLON)? stat
-forloop_stat        : FOR IDENTIFIER IS expr COMMA expr (COMMA expr)? (COLON)? stat
-foreach_stat        : FOR IDENTIFIER (COMMA IDENTIFIER)? IN expr (COLON)? stat
+forloop_stat        : FOR name IS expr COMMA expr (COMMA expr)? (COLON)? stat
+foreach_stat        : FOR name (COMMA name)? IN expr (COLON)? stat
 break_stat          : BREAK
 continue_stat       : CONTINUE
 print_stat          : PRINT expr_list
-empty_stat          : SEMI
+assign_stat         : lvalue_expr (COMMA lvalue_expr)* ASSIGN expr_list
+compoundassign_stat : lvalue_expr compoundassign expr
 
 expr                : select_expr
 select_expr         : logic_or_expr (QUERY expr COLON expr)?
 logic_or_expr       : logic_and_expr (OR logic_and_expr)*
-logic_and_expr      : check_in_expr (AND check_in_expr)*
-check_in_expr       : relation_expr (IN relation_expr)*
+logic_and_expr      : check_expr (AND check_expr)*
+check_expr          : relation_expr ((IN | IS) relation_expr)*
 relation_expr       : bit_or_expr ((EQ | NE | LT | LE | GT | GE) bit_or_expr)?
 bit_or_expr         : bit_xor_expr (BOR bit_xor_expr)*
 bit_xor_expr        : bit_and_expr (BXOR bit_and_expr)*
@@ -42,12 +44,13 @@ addition_expr       : multiple_expr ((ADD | SUB) multiple_expr)*
 multiple_expr       : unary_expr ((MUL | DIV | MOD) unary_expr)*
 unary_expr          : (unop)* pow_expr
 pow_expr            : primary_expr (POW primary_expr)*
-primary_expr        : INT_LITERAL | REAL_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN | var
+primary_expr        : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN | lvalue_expr
 
-var                 : IDENTIFIER
-var_list            : var (COMMA var)*
+lvalue_expr         : name
+name_list           : name (COMMA name)*
 expr_list           : expr (COMMA expr)*
 
+name                : IDENTIFIER
 compoundassign      : SELF_ADD | SELF_SUB | SELF_MUL | SELF_DIV | SELF_POW | SELF_MOD
                     | SELF_BSHL | SELF_BSHR | SELF_BAND | SELF_BXOR | SELF_BOR
 unop                : ADD | SUB | NOT | LEN | BNOT
@@ -140,5 +143,6 @@ FUNC                func
 RETURN              return
 LOCAL               local
 GLOBAL              global
+VAR                 var
 
 PRINT               print

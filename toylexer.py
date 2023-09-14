@@ -127,7 +127,7 @@ class Lexer:
                 result += self.current_char
                 self.advance()
 
-            token.type = TokenType.REAL_LITERAL
+            token.type = TokenType.FLOAT_LITERAL
             token.value = float(result)
 
         return token

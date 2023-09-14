@@ -53,9 +53,9 @@ class Parser:
     def stat(self):
         """parse stat
 
-        stat : assign_stat
-             | compoundassign_stat
+        stat : empty_stat
              | block_stat
+             | var_decl_stat
              | if_stat
              | switch_stat
              | repeat_stat
@@ -65,12 +65,15 @@ class Parser:
              | break_stat
              | continue_stat
              | print_stat
-             | empty_stat
+             | assign_stat
+             | compoundassign_stat
         """
-        if self.current_token.type == TokenType.IDENTIFIER:     # assign_stat | compoundassign_stat NOTE
-            return self.identifier_prefix_stat()
+        if self.current_token.type == TokenType.SEMI:
+            return self.empty_stat()
         elif self.current_token.type == TokenType.LBRACE:       # { block_stat
             return self.block_stat()
+        elif self.current_token.type == TokenType.VAR:
+            return self.var_decl_stat()
         elif self.current_token.type == TokenType.IF:
             return self.if_stat()
         elif self.current_token.type == TokenType.SWITCH:
@@ -87,55 +90,41 @@ class Parser:
             return self.continue_stat()
         elif self.current_token.type == TokenType.PRINT:
             return self.print_stat()
-        elif self.current_token.type == TokenType.SEMI:
-            return self.empty_stat()
-        else:
-            self.error(self.current_token, ErrorInfo.invalid_statement(self.current_token.value))
+        else:                                                   # IDENTIFIER
+            return self.identifier_prefix_stat()
 
-    def identifier_prefix_stat(self):
-        """parse identifier_prefix_stat: assign_stat | compoundassign_stat
+    def empty_stat(self):
+        """parse empty_stat
 
-        assign_stat         : var_list ASSIGN expr_list
-        compoundassign_stat : var compoundassign expr
+        empty_stat : SEMI
         """
-        vars = self.var_list()
-        assert(len(vars) != 0)
-
-        if len(vars) == 1:
-            # compoundassign_stat
-            if self.current_token.type in (TokenType.SELF_ADD, TokenType.SELF_ADD,
-                                           TokenType.SELF_SUB, TokenType.SELF_MUL,
-                                           TokenType.SELF_DIV, TokenType.SELF_POW,
-                                           TokenType.SELF_MOD, TokenType.SELF_BSHL,
-                                           TokenType.SELF_BSHR, TokenType.SELF_BAND,
-                                           TokenType.SELF_BXOR, TokenType.SELF_BOR):
-                stat = CompoundAssignStat(op_type=self.current_token.type,
-                                          var=vars[0],
-                                          expr=None,
-                                          position=self.current_token.position)
-                self.eat(self.current_token.type)
-                stat.expr = self.expr()
-                return stat
-
-        if self.current_token.type == TokenType.ASSIGN:
-            stat = AssignStat(vars=vars,
-                              exprs=None,
-                              position=self.current_token.position)
-            self.eat(TokenType.ASSIGN)
-            stat.exprs = self.expr_list()
-            return stat
-
-        self.error(self.current_token, ErrorInfo.unexpected_token(self.current_token.value, 'assign or compoundassign'))
+        self.eat(TokenType.SEMI)
+        return EmptyStat()
 
     def block_stat(self):
         """parse block_stat
 
         block_stat : LBRACE stat_list RBRACE
         """
-        stat = BlockStat(stats=None, position=self.current_token.position)
+        stat = BlockStat(stats=None,
+                         position=self.current_token.position)
         self.eat(TokenType.LBRACE)
         stat.stats = self.stat_list()
         self.eat(TokenType.RBRACE)
+        return stat
+
+    def var_decl_stat(self):
+        """parse var_decl_stat
+
+        var_decl_stat : VAR name_list (ASSIGN expr_list)?
+        """
+        stat = VarDeclStat(vars=None, exprs=None,
+                           position=self.current_token.position)
+        self.eat(TokenType.VAR)
+        stat.vars = self.name_list()
+        if self.current_token.type == TokenType.ASSIGN:
+            self.eat(TokenType.ASSIGN)
+            stat.exprs = self.expr_list()
         return stat
 
     def if_stat(self):
@@ -143,7 +132,8 @@ class Parser:
 
         if_stat : IF expr (COLON)? stat (ELIF expr (COLON)? stat)* (ELSE (COLON)? stat)?
         """
-        stat = IfStat(conds=None, stats=None, position=self.current_token.position)
+        stat = IfStat(conds=None, stats=None,
+                      position=self.current_token.position)
 
         self.eat(TokenType.IF)
         stat.conds = [self.expr()]
@@ -219,7 +209,8 @@ class Parser:
 
         while_stat : WHILE expr (COLON)? stat
         """
-        stat = WhileStat(expr=None, stat=None, position=self.current_token.position)
+        stat = WhileStat(expr=None, stat=None,
+                         position=self.current_token.position)
         self.eat(TokenType.WHILE)
         stat.expr = self.expr()
         if self.current_token.type == TokenType.COLON:
@@ -230,31 +221,30 @@ class Parser:
     def for_prefix_stat(self):
         """parse forloop_stat | foreach_stat
 
-        forloop_stat : FOR IDENTIFIER IS expr COMMA expr (COMMA expr)? (COLON)? stat
-        foreach_stat : FOR IDENTIFIER (COMMA IDENTIFIER)? IN expr (COLON)? stat
+        forloop_stat : FOR name IS expr COMMA expr (COMMA expr)? (COLON)? stat
+        foreach_stat : FOR name (COMMA name)? IN expr (COLON)? stat
         """
         position = self.current_token.position
         self.eat(TokenType.FOR)
-        identifier = Identifier(self.current_token.value, self.current_token.position)
-        self.eat(TokenType.IDENTIFIER)
+        name = self.name()
 
         if self.current_token.type == TokenType.IS:
-            return self.complete_forloop_stat(identifier, position)
+            return self.complete_forloop_stat(name, position)
         else:
-            return self.complete_foreach_stat(identifier, position)
+            return self.complete_foreach_stat(name, position)
 
-    def complete_forloop_stat(self, identifier, position):
+    def complete_forloop_stat(self, name, position):
         """complete forloop_stat
 
-        forloop_stat : FOR IDENTIFIER IS expr COMMA expr (COMMA expr)? (COLON)? stat
+        forloop_stat : FOR name IS expr COMMA expr (COMMA expr)? (COLON)? stat
         """
-        stat = ForloopStat(identifier=identifier, start_expr=None, stop_expr=None, step_expr=None, stat=None,
+        stat = ForloopStat(var_name=name, start_expr=None, end_expr=None, step_expr=None, stat=None,
                            position=position)
 
         self.eat(TokenType.IS)
         stat.start_expr = self.expr()
         self.eat(TokenType.COMMA)
-        stat.stop_expr = self.expr()
+        stat.end_expr = self.expr()
         if self.current_token.type == TokenType.COMMA:
             self.eat(TokenType.COMMA)
             stat.step_expr = self.expr()
@@ -263,17 +253,17 @@ class Parser:
         stat.stat = self.stat()
         return stat
 
-    def complete_foreach_stat(self, identifier, position):
+    def complete_foreach_stat(self, name, position):
         """parse foreach_stat
 
-        foreach_stat : FOR IDENTIFIER (COMMA IDENTIFIER)? IN expr (COLON)? stat
+        foreach_stat : FOR name (COMMA name)? IN expr (COLON)? stat
         """
-        stat = ForeachStat(key_id=identifier, value_id=None, expr=None, stat=None, position=position)
+        stat = ForeachStat(key_name=name, val_name=None, expr=None, stat=None,
+                           position=position)
 
         if self.current_token.type == TokenType.COMMA:
             self.eat(TokenType.COMMA)
-            stat.value_id = Identifier(self.current_token.value, self.current_token.position)
-            self.eat(TokenType.IDENTIFIER)
+            stat.val_name = self.name()
         self.eat(TokenType.IN)
 
         stat.expr = self.expr()
@@ -311,13 +301,55 @@ class Parser:
         stat.exprs = self.expr_list()
         return stat
 
-    def empty_stat(self):
-        """parse empty_stat
+    def identifier_prefix_stat(self):
+        """parse identifier_prefix_stat: assign_stat | compoundassign_stat
 
-        empty_stat : SEMI
+        assign_stat         : lvalue_expr (COMMA lvalue_expr)* ASSIGN expr_list
+        compoundassign_stat : lvalue_expr compoundassign expr
         """
-        self.eat(TokenType.SEMI)
-        return EmptyStat()
+        lve = self.lvalue_expr()
+        if self.current_token.type in (TokenType.COMMA, TokenType.ASSIGN):
+            return self.complete_assign_stat(lve)
+        else:
+            return self.complete_compoundassign_stat(lve)
+
+    def complete_assign_stat(self, lvalue_expr):
+        """complete assign_stat
+
+        assign_stat : lvalue_expr (COMMA lvalue_expr)* ASSIGN expr_list
+        """
+        left = [lvalue_expr]
+        while self.current_token.type == TokenType.COMMA:
+            self.eat(TokenType.COMMA)
+            left.append(self.lvalue_expr())
+
+        stat = AssignStat(left_exprs=left, right_exprs=None,
+                          position=self.current_token.position)
+        self.eat(TokenType.ASSIGN)
+
+        stat.right_exprs = self.expr_list()
+        return stat
+
+    def complete_compoundassign_stat(self, lvalue_expr):
+        """complete compoundassign_stat
+
+        compoundassign_stat : lvalue_expr compoundassign expr
+        """
+        if self.current_token.type in (TokenType.SELF_ADD, TokenType.SELF_ADD,
+                                       TokenType.SELF_SUB, TokenType.SELF_MUL,
+                                       TokenType.SELF_DIV, TokenType.SELF_POW,
+                                       TokenType.SELF_MOD, TokenType.SELF_BSHL,
+                                       TokenType.SELF_BSHR, TokenType.SELF_BAND,
+                                       TokenType.SELF_BXOR, TokenType.SELF_BOR):
+            stat = CompoundAssignStat(operator=self.current_token.type,
+                                      left_expr=lvalue_expr,
+                                      right_expr=None,
+                                      position=self.current_token.position)
+            self.eat(self.current_token.type)
+            stat.right_expr = self.expr()
+            return stat
+        else:
+            self.error(self.current_token, ErrorInfo.unexpected_token(self.current_token.value, 'compoundassign'))
 
     def expr(self):
         """parse expr
@@ -351,7 +383,7 @@ class Parser:
         """
         expr = self.logic_and_expr()
         while self.current_token.type == TokenType.OR:
-            expr = BinOpExpr(op_type=TokenType.OR, left=expr, right=None,
+            expr = BinOpExpr(operator=TokenType.OR, left=expr, right=None,
                              position=self.current_token.position)
             self.eat(TokenType.OR)
             expr.right = self.logic_and_expr()
@@ -360,26 +392,26 @@ class Parser:
     def logic_and_expr(self):
         """parse logic_and_expr
 
-        logic_and_expr : check_in_expr (AND check_in_expr)*
+        logic_and_expr : check_expr (AND check_expr)*
         """
-        expr = self.check_in_expr()
+        expr = self.check_expr()
         while self.current_token.type == TokenType.AND:
-            expr = BinOpExpr(op_type=TokenType.AND, left=expr, right=None,
+            expr = BinOpExpr(operator=TokenType.AND, left=expr, right=None,
                              position=self.current_token.position)
             self.eat(TokenType.AND)
-            expr.right = self.check_in_expr()
+            expr.right = self.check_expr()
         return expr
 
-    def check_in_expr(self):
-        """parse check_in_expr
+    def check_expr(self):
+        """parse check_expr
 
-        check_in_expr : relation_expr (IN relation_expr)*
+        check_expr : relation_expr ((IN | IS) relation_expr)*
         """
         expr = self.relation_expr()
-        while self.current_token.type == TokenType.IN:
-            expr = BinOpExpr(op_type=TokenType.IN, left=expr, right=None,
+        while self.current_token.type in (TokenType.IN, TokenType.IS):
+            expr = BinOpExpr(operator=self.current_token.type, left=expr, right=None,
                              position=self.current_token.position)
-            self.eat(TokenType.IN)
+            self.eat(self.current_token.type)
             expr.right = self.relation_expr()
         return expr
 
@@ -392,7 +424,7 @@ class Parser:
         if self.current_token.type in (TokenType.EQ, TokenType.NE,
                                        TokenType.LT, TokenType.LE,
                                        TokenType.GT, TokenType.GE):
-            expr = BinOpExpr(op_type=self.current_token.type, left=expr, right=None,
+            expr = BinOpExpr(operator=self.current_token.type, left=expr, right=None,
                              position=self.current_token.position)
             self.eat(self.current_token.type)
             expr.right = self.bit_or_expr()
@@ -405,7 +437,7 @@ class Parser:
         """
         expr = self.bit_xor_expr()
         while self.current_token.type == TokenType.BOR:
-            expr = BinOpExpr(op_type=TokenType.BOR, left=expr, right=None,
+            expr = BinOpExpr(operator=TokenType.BOR, left=expr, right=None,
                              position=self.current_token.position)
             self.eat(TokenType.BOR)
             expr.right = self.bit_xor_expr()
@@ -418,7 +450,7 @@ class Parser:
         """
         expr = self.bit_and_expr()
         while self.current_token.type == TokenType.BXOR:
-            expr = BinOpExpr(op_type=TokenType.BXOR, left=expr, right=None,
+            expr = BinOpExpr(operator=TokenType.BXOR, left=expr, right=None,
                              position=self.current_token.position)
             self.eat(TokenType.BXOR)
             expr.right = self.bit_and_expr()
@@ -431,7 +463,7 @@ class Parser:
         """
         expr = self.bit_shift_expr()
         while self.current_token.type == TokenType.BAND:
-            expr = BinOpExpr(op_type=TokenType.BAND, left=expr, right=None,
+            expr = BinOpExpr(operator=TokenType.BAND, left=expr, right=None,
                              position=self.current_token.position)
             self.eat(TokenType.BAND)
             expr.right = self.bit_shift_expr()
@@ -444,7 +476,7 @@ class Parser:
         """
         expr = self.addition_expr()
         while self.current_token.type in (TokenType.BSHL, TokenType.BSHR):
-            expr = BinOpExpr(op_type=self.current_token.type, left=expr, right=None,
+            expr = BinOpExpr(operator=self.current_token.type, left=expr, right=None,
                              position=self.current_token.position)
             self.eat(self.current_token.type)
             expr.right = self.addition_expr()
@@ -457,7 +489,7 @@ class Parser:
         """
         expr = self.multiple_expr()
         while self.current_token.type in (TokenType.ADD, TokenType.SUB):
-            expr = BinOpExpr(op_type=self.current_token.type, left=expr, right=None,
+            expr = BinOpExpr(operator=self.current_token.type, left=expr, right=None,
                              position=self.current_token.position)
             self.eat(self.current_token.type)
             expr.right = self.multiple_expr()
@@ -470,7 +502,7 @@ class Parser:
         """
         expr = self.unary_expr()
         while self.current_token.type in (TokenType.MUL, TokenType.DIV, TokenType.MOD):
-            expr = BinOpExpr(op_type=self.current_token.type, left=expr, right=None,
+            expr = BinOpExpr(operator=self.current_token.type, left=expr, right=None,
                              position=self.current_token.position)
             self.eat(self.current_token.type)
             expr.right = self.unary_expr()
@@ -483,7 +515,7 @@ class Parser:
         """
         if self.current_token.type in (TokenType.ADD, TokenType.SUB, TokenType.NOT,
                                        TokenType.LEN, TokenType.BNOT):
-            expr = UniOpExpr(op_type=self.current_token.type, expr=None,
+            expr = UniOpExpr(operator=self.current_token.type, expr=None,
                              position=self.current_token.position)
             self.eat(self.current_token.type)
             expr.expr = self.unary_expr()
@@ -498,7 +530,7 @@ class Parser:
         """
         expr = self.primary_expr()
         while self.current_token.type == TokenType.POW:
-            expr = BinOpExpr(op_type=self.current_token.type, left=expr, right=None,
+            expr = BinOpExpr(operator=self.current_token.type, left=expr, right=None,
                              position=self.current_token.position)
             self.eat(self.current_token.type)
             expr.right = self.primary_expr()
@@ -507,9 +539,9 @@ class Parser:
     def primary_expr(self):
         """parse primary_expr
 
-        primary_expr : INT_LITERAL | REAL_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN | var
+        primary_expr : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN | lvalue_expr
         """
-        if self.current_token.type in (TokenType.INT_LITERAL, TokenType.REAL_LITERAL):
+        if self.current_token.type in (TokenType.INT_LITERAL, TokenType.FLOAT_LITERAL):
             expr = Num(self.current_token.value, self.current_token.position)
             self.eat(self.current_token.type)
             return expr
@@ -531,27 +563,25 @@ class Parser:
             self.eat(TokenType.RPAREN)
             return expr
         else:
-            return self.var()
+            return self.lvalue_expr()
 
-    def var_list(self):
-        """parse var_list
+    def lvalue_expr(self):
+        """parse lvalue_expr
 
-        var_list : var (COMMA var)*
+        lvalue_expr : name
         """
-        vars = [self.var()]
+        return self.name()
+
+    def name_list(self):
+        """parse name_list
+
+        name_list : name (COMMA name)*
+        """
+        vars = [self.name()]
         while self.current_token.type == TokenType.COMMA:
             self.eat(TokenType.COMMA)
-            vars.append(self.var())
+            vars.append(self.name())
         return vars
-
-    def var(self):
-        """parse var
-
-        var : IDENTIFIER
-        """
-        var = Identifier(self.current_token.value, self.current_token.position)
-        self.eat(TokenType.IDENTIFIER)
-        return var
 
     def expr_list(self):
         """parse expr_list
@@ -564,6 +594,15 @@ class Parser:
             exprs.append(self.expr())
         return exprs
 
+    def name(self):
+        """parse name
+
+        name : IDENTIFIER
+        """
+        name = Name(self.current_token.value, self.current_token.position)
+        self.eat(TokenType.IDENTIFIER)
+        return name
+
     def parse(self):
         result = self.program()
         if self.current_token.type != TokenType.EOF:
@@ -573,7 +612,7 @@ class Parser:
 
 if __name__ == '__main__':
     code = '''
-    x,y,z,t = 1,true,'hello, world', null
+    var x,y,z,t = 1,true,'hello, world', null
     // x = y + ------1
     print x,y
 
@@ -600,7 +639,7 @@ if __name__ == '__main__':
         print i*2;
         i += 1;
     } until i >= 10;
-    
+
 
     for k,v in map {
         print k,v
@@ -613,7 +652,7 @@ if __name__ == '__main__':
         parser = Parser(lexer)
         tree = parser.parse()
 
-        displayer = Displayer(tree)
+        displayer = Displayer(tree, 'ast.html')
         displayer.display()
     except (LexerError, ParserError) as e:
         print(e)

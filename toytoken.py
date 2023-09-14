@@ -6,20 +6,11 @@ toylang token define
 from enum import Enum
 
 
-class ValueType(Enum):
-    STRING              = 'string'
-    INT                 = 'int'
-    REAL                = 'real'
-    LIST                = 'list'
-    OBJECT              = 'object'
-    TABLE               = 'table'
-
-
 class TokenType(Enum):
     # misc
     IDENTIFIER          = 'IDENTIFIER'
     INT_LITERAL         = 'INT_LITERAL'
-    REAL_LITERAL        = 'REAL_LITERAL'
+    FLOAT_LITERAL       = 'FLOAT_LITERAL'
     STRING_LITERAL      = 'STRING_LITERAL'
     EOF                 = 'EOF'
 
@@ -94,8 +85,9 @@ class TokenType(Enum):
     IN                  = 'in'
     FUNC                = 'func'
     RETURN              = 'return'
-    LOCAL               = 'local'
-    GLOBAL              = 'global'
+    LOCAL               = 'local'       # -
+    GLOBAL              = 'global'      # -
+    VAR                 = 'var'
     PRINT               = 'print'       # NOTE
     TRUE                = 'true'
     FALSE               = 'false'
