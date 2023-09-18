@@ -2,14 +2,12 @@
 """
 toylang ast displayer
 """
+from toyconfig import *
+from toyast import *
 
 from pyecharts import options as opts
 from pyecharts.charts import Tree
 import os
-from toyast import *
-
-
-LOCAL_ECHARTS = False
 
 
 class Displayer(AstNodeVistor):
@@ -56,8 +54,9 @@ class Displayer(AstNodeVistor):
     def visit_SwitchStat(self, node: SwitchStat):
         data = {'name': 'switch', 'children': []}
         data['children'].append({'name': 'expr', 'children': [self.visit(node.expr)]})
-        for case, stat in zip(node.case_exprs, node.stats):
+        for case, stat in zip(node.case_exprs, node.case_stats):
             data['children'].append({'name': 'case', 'children': [self.visit(case), self.visit(stat)]})
+        data['children'].append({'name': 'default', 'children': [self.visit(node.default_stat)]})
         return data
 
     def visit_RepeatStat(self, node: RepeatStat):
@@ -190,7 +189,7 @@ class Displayer(AstNodeVistor):
         with open('html', 'r') as fin:
             content = fin.readlines()
             content[4] = '    <title>Tree</title>\n'
-            if LOCAL_ECHARTS:
+            if CONFIG_USE_LOCAL_ECHARTS:
                 content[5] = '    <script type="text/javascript" src="../../echarts.min.js"></script>\n'
         with open(f'{self.filename}', 'w') as fout:
             fout.writelines(content)

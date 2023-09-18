@@ -2,10 +2,8 @@
 """
 toylang lexer
 """
-
 from toytoken import *
 from toyerror import *
-
 
 class Lexer:
     def __init__(self, text: str):
@@ -118,7 +116,6 @@ class Lexer:
 
         if self.current_char != '.':
             token.type = TokenType.INT_LITERAL
-            token.value = int(result)
         else:
             result += '.'
             self.advance()
@@ -128,8 +125,8 @@ class Lexer:
                 self.advance()
 
             token.type = TokenType.FLOAT_LITERAL
-            token.value = float(result)
 
+        token.value = result
         return token
 
     def string_literal(self):

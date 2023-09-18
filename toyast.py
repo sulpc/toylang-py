@@ -11,9 +11,7 @@ name style:
 - `value`: a value
 - `identifier`: a string identifier
 """
-
 from toytoken import *
-
 
 class AST:
     pass
@@ -49,10 +47,11 @@ class IfStat(AST):
 
 
 class SwitchStat(AST):
-    def __init__(self, expr, case_exprs, stats, position):
+    def __init__(self, expr, case_exprs, case_stats, default_stat, position):
         self.expr = expr
         self.case_exprs = case_exprs
-        self.stats = stats
+        self.case_stats = case_stats
+        self.default_stat = default_stat
         self.position = position
 
 
@@ -154,8 +153,9 @@ class Name(AST):
 
 
 class Num(AST):
-    def __init__(self, value, position):
+    def __init__(self, value, is_int, position):
         self.value = value
+        self.is_int = is_int
         self.position = position
 
 
@@ -174,7 +174,6 @@ class Bool(AST):
 class Null(AST):
     def __init__(self, position):
         self.position = position
-
 
 
 class AstNodeVistor():

@@ -1,2 +1,2 @@
 # toylang-py
-toylang implement by py
+toylang implement by python.

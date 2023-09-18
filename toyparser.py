@@ -2,13 +2,11 @@
 """
 toylang parser
 """
-
 from toytoken import *
-from toyast import *
-from toylexer import *
 from toyerror import *
+from toylexer import *
+from toyast import *
 from toydisplayer import *
-
 
 class Parser:
     def __init__(self, lexer: Lexer):
@@ -162,14 +160,14 @@ class Parser:
 
         switch_stat : SWITCH expr (COLON)? (CASE expr (COLON)? stat)+ (DEFAULT (COLON)? stat)?
         """
-        stat = SwitchStat(expr=None, case_exprs=None, stats=None,
+        stat = SwitchStat(expr=None, case_exprs=None, case_stats=None, default_stat=None,
                           position=self.current_token.position)
         self.eat(TokenType.SWITCH)
         stat.expr = self.expr()
         if self.current_token.type == TokenType.COLON:
             self.eat(TokenType.COLON)
         stat.case_exprs = []
-        stat.stats = []
+        stat.case_stats = []
 
         if self.current_token.type != TokenType.CASE:
             self.error(self.current_token, ErrorInfo.unexpected_token(self.current_token.value, "case"))
@@ -179,14 +177,14 @@ class Parser:
             stat.case_exprs.append(self.expr())
             if self.current_token.type == TokenType.COLON:
                 self.eat(TokenType.COLON)
-            stat.stats.append(self.stat())
+            stat.case_stats.append(self.stat())
 
         if self.current_token.type == TokenType.DEFAULT:
             self.eat(TokenType.DEFAULT)
-            stat.case_exprs.append(Bool('true', self.current_token.position))    # make `default:` to `case True`
             if self.current_token.type == TokenType.COLON:
                 self.eat(TokenType.COLON)
-            stat.stats.append(self.stat())
+            stat.default_stat = self.stat()
+        return stat
 
     def repeat_stat(self):
         """parse repeat_stat
@@ -548,8 +546,14 @@ class Parser:
 
         primary_expr : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN | lvalue_expr
         """
-        if self.current_token.type in (TokenType.INT_LITERAL, TokenType.FLOAT_LITERAL):
-            expr = Num(self.current_token.value, self.current_token.position)
+        if self.current_token.type == TokenType.INT_LITERAL:
+            expr = Num(self.current_token.value, is_int=True,
+                       position=self.current_token.position)
+            self.eat(self.current_token.type)
+            return expr
+        elif self.current_token.type == TokenType.FLOAT_LITERAL:
+            expr = Num(self.current_token.value, is_int=False,
+                       position=self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type == TokenType.STRING_LITERAL:

@@ -2,9 +2,7 @@
 """
 toylang token define
 """
-
 from enum import Enum
-
 
 class TokenType(Enum):
     # misc

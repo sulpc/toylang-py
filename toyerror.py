@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+"""
+toylang error information
+"""
+
 class ErrorInfo:
     # lexer error
 
@@ -24,8 +29,8 @@ class ErrorInfo:
         return f'token `{item}` is not expected, want `{want}`'
 
     @staticmethod
-    def unsupported_type(item):     # info: code not completed
-        return f'type `{item}` is not supported'
+    def type_not_implemented(item):
+        return f'type `{item}` is not implemented'
 
     # semantic error
 
@@ -60,12 +65,16 @@ class ErrorInfo:
     # intepreter error
 
     @staticmethod
-    def id_not_valid(item):
-        return f'identifier `{item}` can not visit'
+    def name_not_valid(item):
+        return f'name `{item}` is invalid'
 
     @staticmethod
-    def unsupported_op(item):        # info: code not completed
-        return f'op `{item}` is not supported'
+    def op_not_implemented(item):
+        return f'op `{item}` is not implemented'
+
+    @staticmethod
+    def op_used_on_wrong_type(item):
+        return f'op `{item}` used on wrong type'
 
 
 class Error(Exception):

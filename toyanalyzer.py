@@ -7,12 +7,15 @@ role:
 - insure temp var in for stat not be assigned
 - insure var not be duplicate declared
 """
-
-from toysymbol import *
-from toyast import *
+from toyconfig import *
+from toytoken import *
 from toyerror import *
+from toylexer import *
+from toyast import *
+from toydisplayer import *
+from toyparser import *
+from toysymbol import *
 
-_USE_ANALYZER_LOG = True
 
 class SemanticAnalyzer(AstNodeVistor):
     def __init__(self, tree):
@@ -25,7 +28,7 @@ class SemanticAnalyzer(AstNodeVistor):
         raise SemanticError(position, message)
 
     def log(self, msg):
-        if _USE_ANALYZER_LOG:
+        if CONFIG_USE_ANALYZER_LOG:
             print(msg)
 
     def enter_scope(self, identifier, inherit=True):
@@ -77,9 +80,10 @@ class SemanticAnalyzer(AstNodeVistor):
 
     def visit_SwitchStat(self, node: SwitchStat):
         self.visit(node.expr)
-        for case, stat in zip(node.case_exprs, node.stats):
+        for case, stat in zip(node.case_exprs, node.case_stats):
             self.visit(case)
             self.visit(stat)
+        self.visit(node.default_stat)
 
     def visit_RepeatStat(self, node: RepeatStat):
         self.in_loop = True
@@ -220,9 +224,7 @@ if __name__ == '__main__':
     z = pq      // pq not define
     ;
     '''
-    from toylexer import *
-    from toyparser import *
-    from toydisplayer import *
+
     try:
         lexer = Lexer(code)
         parser = Parser(lexer)

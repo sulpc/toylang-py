@@ -2,36 +2,15 @@
 """
 toylang symbol define
 """
+from toyconfig import *
 from collections import OrderedDict
-from enum import Enum
-
-_USE_SCOPE_LOG = True
-
-class ValueType(Enum):
-    NULL                = 'null'
-    BOOL                = 'bool'
-    INT                 = 'int'
-    FLOAT               = 'float'
-    STRING              = 'string'
-    LIST                = 'list'
-    MAP                 = 'map'
-    FUNCTION            = 'function'
-    OBJECT              = 'object'
-    TYPE                = 'type'
-
-
-class SymbolType(Enum):
-    VARIABLE     = 'variable'    # variable can be assigned
-    NAME         = 'name'        # used in for statement
-    BUILTIN_TYPE = 'buildin_type'
-    # FUNCTION     = 'function'
 
 
 class Symbol:
     def __init__(self, identifier):
         self.identifier = identifier
         self.scope_level = 0
-        self.value = None
+        # self.value = None
 
     def __str__(self) -> str:
         return self.identifier
@@ -42,6 +21,7 @@ class Symbol:
             class_name=self.__class__.__name__,
             identifier=self.identifier,
         )
+
 
 class BuiltinTypeSymbol(Symbol):
     def __init__(self, identifier):
@@ -80,7 +60,7 @@ class ScopeSymbolTable:
     __repr__ = __str__
 
     def log(self, msg):
-        if _USE_SCOPE_LOG:
+        if CONFIG_USE_SCOPE_LOG:
             print(msg)
 
     def insert(self, symbol: Symbol):
