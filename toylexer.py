@@ -4,6 +4,7 @@ toylang lexer
 """
 from toytoken import *
 from toyerror import *
+import sys
 
 class Lexer:
     def __init__(self, text: str):
@@ -190,21 +191,15 @@ class Lexer:
 
 
 if __name__ == '__main__':
-    text = """
-    a = 1
-    b = 2
-    c = a + b
+    if len(sys.argv) < 2:
+        print('usage: python toy.py <src.toy>')
+        sys.exit(0)
 
-    c = 'hello'
-    d = "\"aaaaaa\""
-    e = `'"xxxxfggj;ij
-    dghjzzz"'
-    `
-
-    """
+    with open(sys.argv[1], 'r') as f:
+        code = f.read()
 
     try:
-        lexer = Lexer(text)
+        lexer = Lexer(code)
 
         while True:
             token = lexer.next_token()

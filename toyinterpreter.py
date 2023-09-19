@@ -8,8 +8,8 @@ from toylexer import *
 from toyparser import *
 from toyast import *
 from toydisplayer import *
-from toyanalyzer import *
 from toyvalue import *
+from toylib import *
 
 import argparse
 
@@ -30,7 +30,7 @@ class ActivationRecord:
     def __str__(self) -> str:
         lines = [f'{self.nesting_level}: {self.name}']
         for name, val in self.members.items():
-            lines.append(f'    {name:<20}: {val.type():<7}: {val}')
+            lines.append(f'    {name:<20}: {val.type():<12}: {val}')
         return '==========================================\n' + 'ACTIVATION RECORD:\n' + '\n'.join(lines) + '\n=========================================='
 
     def __repr__(self):
@@ -50,6 +50,7 @@ class ActivationRecord:
 
     def init_builtins(self):
         builtin_typevalues_init(self.members)
+        ToyLib.register(self.members)
 
 
 class CallStack:
@@ -126,7 +127,10 @@ class Interpreter(AstNodeVistor):
 
     def visit_IfStat(self, node: IfStat):
         for cond_expr, stat in zip(node.cond_exprs, node.stats):
-            cond_value = OpImpl.value_to_bool(self.visit(cond_expr))
+            try:
+                cond_value = OpImpl.value_to_bool(self.visit(cond_expr))
+            except ToyTypeError:
+                self.error(cond_expr.position, ErrorInfo.expr_convert_bool_error())
             if cond_value._val:
                 self.visit(stat)
                 return
@@ -144,7 +148,14 @@ class Interpreter(AstNodeVistor):
             self.visit(node.default_stat)
 
     def visit_RepeatStat(self, node: RepeatStat):
-        pass
+        while True:
+            self.visit(node.stat)
+            try:
+                expr_val = OpImpl.value_to_bool(self.visit(node.expr))
+            except ToyTypeError:
+                self.error(node.expr.position, ErrorInfo.expr_convert_bool_error())
+            if expr_val._val:
+                break
 
     def visit_WhileStat(self, node: WhileStat):
         pass
@@ -161,18 +172,13 @@ class Interpreter(AstNodeVistor):
     def visit_ContinueStat(self, node: ContinueStat):
         pass
 
-    def visit_PrintStat(self, node: PrintStat):
-        for stat in node.exprs:
-            print(self.visit(stat), end=' ')
-        print()
-
     def visit_AssignStat(self, node: AssignStat):
         for i in range(len(node.left_exprs)):
             left_expr = node.left_exprs[i]
-            right_expr = node.right_exprs[i] if i < len(node.right_exprs) else None
+            right_val = self.visit(node.right_exprs[i]) if i < len(node.right_exprs) else NullValue()
 
             if type(left_expr) == Name:      # NAME = .*
-                self.call_stack.current_ar[left_expr.identifier] = self.visit(right_expr) if right_expr else NullValue()
+                self.set_Name(left_expr, right_val)
             else:                            # NAME.NAME | NAME[expr]
                 # TODO
                 self.error(node.position, 'TODO: access')
@@ -183,17 +189,38 @@ class Interpreter(AstNodeVistor):
         if type(left_expr) == Name:      # NAME += .*
             if node.operator in BINOP_IMPL_TABLE:
                 try:
-                    self.call_stack.current_ar[left_expr.identifier] = BINOP_IMPL_TABLE[node.operator](self.visit(left_expr), self.visit(right_expr))
-                except TypeError:
+                    new_val = BINOP_IMPL_TABLE[node.operator](self.visit(left_expr), self.visit(right_expr))
+                except ToyTypeError:
                     self.error(node.position, ErrorInfo.op_used_on_wrong_type(node.operator.value))
+                self.set_Name(left_expr, new_val)
             else:
-                self.error(node.position, ErrorInfo.op_not_supported(node.operator.value))
+                self.error(node.position, ErrorInfo.op_not_implemented(node.operator.value))
         else:
             # TODO
             self.error(node.position, 'TODO: access')
 
+    def visit_FuncCall(self, node: FuncCall):
+        func_val = self.visit(node.func_expr)
+        if type(func_val) == HostFunctionValue:
+            args = []
+            if node.arg_exprs:
+                for arg_expr in node.arg_exprs:
+                    args.append(self.visit(arg_expr))
+            result = func_val._func(args)
+            if result:
+                assert(type(result) == list)
+                # TODO: when function return multi values
+                return result[0]
+            else:
+                return NullValue()
+        else:
+            self.error(node.position, "TODO: func call")
+
     def visit_SelectExpr(self, node: SelectExpr):
-        cond_val = OpImpl.value_to_bool(self.visit(node.cond))
+        try:
+            cond_val = OpImpl.value_to_bool(self.visit(node.cond))
+        except ToyTypeError:
+            self.error(cond_val.position, ErrorInfo.expr_convert_bool_error())
         if cond_val._val:
             return self.visit(node.expr1)
         else:
@@ -220,11 +247,11 @@ class Interpreter(AstNodeVistor):
                 result = BINOP_IMPL_TABLE[operator](left_val, right_val)
                 if reverse:    # must be a bool
                     result._val = not result._val
-            except TypeError:
+            except ToyTypeError:
                 self.error(node.position, ErrorInfo.op_used_on_wrong_type(operator.value))
             return result
         else:
-            self.error(node.position, ErrorInfo.op_not_supported(operator.value))
+            self.error(node.position, ErrorInfo.op_not_implemented(operator.value))
 
     def visit_UniOpExpr(self, node: UniOpExpr):
         expr = node.expr
@@ -233,11 +260,11 @@ class Interpreter(AstNodeVistor):
         if node.operator in UNIOP_IMPL_TABLE:
             try:
                 result = UNIOP_IMPL_TABLE[node.operator](expr_value)
-            except TypeError:
+            except ToyTypeError:
                 self.error(node.position, ErrorInfo.op_used_on_wrong_type(node.operator.value))
             return result
         else:
-            self.error(node.position, ErrorInfo.op_not_supported(node.operator.value))
+            self.error(node.position, ErrorInfo.op_not_implemented(node.operator.value))
 
     def visit_Name(self, node: Name):
         identifier = node.identifier
@@ -248,7 +275,7 @@ class Interpreter(AstNodeVistor):
                 return value
             else:
                 ar = ar.outer
-        self.error(node.position, ErrorInfo.name_not_valid(identifier))
+        self.error(node.position, ErrorInfo.name_not_created(identifier))
 
     def visit_Num(self, node: Num):
         if node.is_int:
@@ -265,67 +292,36 @@ class Interpreter(AstNodeVistor):
     def visit_Null(self, node: Null):
         return NullValue()
 
+    def set_Name(self, name: Name, value):
+        ar = self.call_stack.current_ar
+        while ar is not None:
+            if ar.has(name.identifier):
+                ar[name.identifier] = value
+                return
+            else:
+                ar = ar.outer
+        self.error(name.position, ErrorInfo.name_not_created(name.identifier))
+
+    def set_Field(self, name: Name, field: Value, value: Value):
+        pass
+
     def interpret(self, tree):
         self.visit(tree)
 
 
 if __name__ == '__main__':
-    code = '''
-    var i = 1
-    print('i =', i)
-    if i > 1
-        print('i>1')
-    else
-        print('i<1')
-
-    i += 1
-    print('i =', i)
-    switch i
-    case 1:
-        print('in case 1')
-    case 2 {
-        print('in case 2')
-    }
-    default
-        print('default')
-    '''
-
     parser = argparse.ArgumentParser(description='toylang interpreter')
-    # parser.add_argument('inputfile', help='source file')
-    parser.add_argument('--repl', action='store_true', help='run in repl mode')
+    parser.add_argument('--src', help='source file')
+    parser.add_argument('--repl', action='store_true', help='repl mode')
     args = parser.parse_args()
 
     interpreter = Interpreter()
 
-    if args.repl:
-        while True:
-            try:
-                text = input('>>> ')
-                text = text.strip(' \n')
-                if len(text) == 0:
-                    continue
-                elif text == 'exit':
-                    break
-                elif text == 'info':
-                    print(interpreter.call_stack)
-                    continue
-
-                lexer = Lexer(text)
-                parser = Parser(lexer)
-                tree = parser.parse()
-
-                displayer = Displayer(tree, 'ast.html')
-                displayer.display()
-
-                # analyzer = SemanticAnalyzer(tree)
-                # analyzer.analysis()
-
-                # stat or expr?
-                interpreter.interpret(tree)
-            except (LexerError, ParserError, SemanticError, InterpreterError) as e:
-                print(e)
-    else:
+    if args.src:
         try:
+            with open(args.src, 'r') as f:
+                code = f.read()
+
             lexer = Lexer(code)
             parser = Parser(lexer)
             tree = parser.parse()
@@ -333,10 +329,44 @@ if __name__ == '__main__':
             displayer = Displayer(tree, 'ast.html')
             displayer.display()
 
-            analyzer = SemanticAnalyzer(tree)
-            analyzer.analysis()
-
-            # interpreter = Interpreter()
             interpreter.interpret(tree)
         except (LexerError, ParserError, SemanticError, InterpreterError) as e:
             print(e)
+            raise e
+    # elif args.repl:
+    else:
+        text = ''
+        while True:
+            try:
+                line = input('>>> ').strip()
+
+                if len(line) == 0:
+                    continue
+                elif line == 'exit':
+                        break
+                elif line[0] == '%':               # exec interepter command
+                    line = line[1:].strip()
+                    if line == 'info':
+                        print(interpreter.call_stack)
+                        continue
+                    else:
+                        print('unknown command')
+                        continue
+                elif line[-1] == '\\':             # multi-line code
+                    text += ' ' + line[:-1].strip()
+                    continue
+                else:
+                    text += ' ' + line
+
+                lexer = Lexer(text)
+                text = ''
+                parser = Parser(lexer)
+                tree = parser.parse()
+
+                displayer = Displayer(tree, 'ast.html')
+                displayer.display()
+
+                interpreter.interpret(tree)
+            except (LexerError, ParserError, SemanticError, InterpreterError) as e:
+                print(e)
+                # raise e

@@ -3,6 +3,7 @@
 toylang value define
 """
 from toytoken import *
+from toyerror import *
 
 class Value:
     def __str__(self):
@@ -78,6 +79,19 @@ class TypeValue(Value):
     def __str__(self):
         return self._val
 
+"""
+HostFunction all like:
+f(argc, argv: list[Value]) -> list[Value]    # argc not need in py
+"""
+
+class HostFunctionValue(Value):
+    def __init__(self, name, _func):
+        self.name = name
+        self._func = _func
+
+    def __str__(self):
+        return f'{self.name}'
+
 
 def builtin_typevalues_init(table):
     table['null'] = TypeValue('null')
@@ -103,14 +117,14 @@ class OpImpl:
         if type(l) == NumValue and type(r) == NumValue:
             return BoolValue(l._val < r._val)
         else:
-            raise TypeError
+            raise ToyTypeError
 
     @staticmethod
     def le(l, r):
         if type(l) == NumValue and type(r) == NumValue:
             return BoolValue(l._val <= r._val)
         else:
-            raise TypeError
+            raise ToyTypeError
 
     @staticmethod
     def add(l, r):
@@ -119,21 +133,21 @@ class OpImpl:
         elif type(l) == StringValue and type(r) in (StringValue, NumValue):
             return StringValue(l._val + str(r._val))
         else:
-            raise TypeError
+            raise ToyTypeError
 
     @staticmethod
     def sub(l, r):
         if type(l) == NumValue and type(r) == NumValue:
             return NumValue(l._val - r._val, is_int=True if l.is_int and r.is_int else False)
         else:
-            raise TypeError
+            raise ToyTypeError
 
     @staticmethod
     def mul(l, r):
         if type(l) == NumValue and type(r) == NumValue:
             return NumValue(l._val * r._val, is_int=True if l.is_int and r.is_int else False)
         else:
-            raise TypeError
+            raise ToyTypeError
 
     @staticmethod
     def div(l, r):
@@ -143,7 +157,7 @@ class OpImpl:
             else:
                 return NumValue(l._val / r._val, is_int=False)
         else:
-            raise TypeError
+            raise ToyTypeError
 
     # @staticmethod
     # def pow_
@@ -183,14 +197,14 @@ class OpImpl:
         if type(v) == NumValue:
             return v
         else:
-            raise TypeError
+            raise ToyTypeError
 
     # @staticmethod
     def sub_(v):
         if type(v) == NumValue:
             return NumValue(-v._val, is_int=v.is_int)
         else:
-            raise TypeError
+            raise ToyTypeError
 
     @staticmethod
     def not_(v):
@@ -213,10 +227,8 @@ class OpImpl:
             return val
         elif type(val) == NumValue:
             return BoolValue(val._val != 0)
-        elif type(val) in (StringValue, ListValue, MapValue):
-            return BoolValue(len(val._val) != 0)
         else:
-            return BoolValue(True)
+            raise ToyTypeError
 
 
 BINOP_IMPL_TABLE = {

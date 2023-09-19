@@ -65,8 +65,8 @@ class ErrorInfo:
     # intepreter error
 
     @staticmethod
-    def name_not_valid(item):
-        return f'name `{item}` is invalid'
+    def name_not_created(item):
+        return f'name `{item}` is not created'
 
     @staticmethod
     def op_not_implemented(item):
@@ -75,6 +75,10 @@ class ErrorInfo:
     @staticmethod
     def op_used_on_wrong_type(item):
         return f'op `{item}` used on wrong type'
+
+    @staticmethod
+    def expr_convert_bool_error():
+        return f'expr  convert to bool value error'
 
 
 class Error(Exception):
@@ -98,6 +102,14 @@ class ParserError(Error):
 
 class SemanticError(Error):
     pass
+
+
+class ToyTypeError(Error):
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        return ''
 
 
 class InterpreterError(Error):

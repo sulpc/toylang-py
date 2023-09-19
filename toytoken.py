@@ -83,10 +83,7 @@ class TokenType(Enum):
     IN                  = 'in'
     FUNC                = 'func'
     RETURN              = 'return'
-    LOCAL               = 'local'       # -
-    GLOBAL              = 'global'      # -
     VAR                 = 'var'
-    PRINT               = 'print'       # NOTE
     TRUE                = 'true'
     FALSE               = 'false'
     NULL                = 'null'

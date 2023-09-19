@@ -106,12 +106,6 @@ class Displayer(AstNodeVistor):
         data = {'name': 'continue'}
         return data
 
-    def visit_PrintStat(self, node: PrintStat):
-        data = {'name': 'print', 'children': []}
-        for expr in node.exprs:
-            data['children'].append(self.visit(expr))
-        return data
-
     def visit_AssignStat(self, node: AssignStat):
         data = {'name': '=', 'children': []}
         lexprs = {'name': 'lexprs', 'children': []}
@@ -128,6 +122,16 @@ class Displayer(AstNodeVistor):
         data = {'name': f'{node.operator.value}', 'children': []}
         data['children'].append(self.visit(node.left_expr))
         data['children'].append(self.visit(node.right_expr))
+        return data
+
+    def visit_FuncCall(self, node: FuncCall):
+        data = {'name': 'call', 'children': []}
+        data['children'].append({'name': 'func', 'children': [self.visit(node.func_expr)]})
+        if node.arg_exprs:
+            args = {'name': 'args', 'children': []}
+            for expr in node.arg_exprs:
+                args['children'].append(self.visit(expr))
+            data['children'].append(args)
         return data
 
     def visit_SelectExpr(self, node: SelectExpr):

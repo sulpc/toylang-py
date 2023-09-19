@@ -11,9 +11,9 @@ stat                : empty_stat
                     | foreach_stat
                     | break_stat
                     | continue_stat
-                    | print_stat
                     | assign_stat
                     | compoundassign_stat
+                    | func_call_stat
 
 empty_stat          : SEMI
 block_stat          : LBRACE stat_list RBRACE
@@ -26,10 +26,9 @@ forloop_stat        : FOR name IS expr COMMA expr (COMMA expr)? (COLON)? stat
 foreach_stat        : FOR name (COMMA name)? IN expr (COLON)? stat
 break_stat          : BREAK
 continue_stat       : CONTINUE
-print_stat          : PRINT expr_list
-                    | PRINT LPAREN expr_list RPAREN
 assign_stat         : lvalue_expr (COMMA lvalue_expr)* ASSIGN expr_list
 compoundassign_stat : lvalue_expr compoundassign expr
+func_call_stat      : func_call
 
 expr                : select_expr
 select_expr         : logic_or_expr (QUERY expr COLON expr)?
@@ -46,8 +45,15 @@ multiple_expr       : unary_expr ((MUL | DIV | MOD) unary_expr)*
 unary_expr          : (unop)* pow_expr
 pow_expr            : primary_expr (POW primary_expr)*
 primary_expr        : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN | lvalue_expr
+                    | func_call_expr
 
+func_def_expr       :
+func_call_expr      : func_call
+list_ctor_expr      :
+map_ctor_expr       :
+slice_expr          :
 lvalue_expr         : name
+func_call           : lvalue_expr LPAREN (expr_list)? RPAREN
 name_list           : name (COMMA name)*
 expr_list           : expr (COMMA expr)*
 
@@ -142,8 +148,4 @@ NULL                null
 
 FUNC                func
 RETURN              return
-LOCAL               local
-GLOBAL              global
 VAR                 var
-
-PRINT               print

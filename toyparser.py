@@ -7,6 +7,7 @@ from toyerror import *
 from toylexer import *
 from toyast import *
 from toydisplayer import *
+import sys
 
 class Parser:
     def __init__(self, lexer: Lexer):
@@ -62,9 +63,9 @@ class Parser:
              | foreach_stat
              | break_stat
              | continue_stat
-             | print_stat
              | assign_stat
              | compoundassign_stat
+             | func_call_stat
         """
         if self.current_token.type == TokenType.SEMI:
             return self.empty_stat()
@@ -86,8 +87,6 @@ class Parser:
             return self.break_stat()
         elif self.current_token.type == TokenType.CONTINUE:
             return self.continue_stat()
-        elif self.current_token.type == TokenType.PRINT:
-            return self.print_stat()
         else:                                                   # IDENTIFIER
             return self.identifier_prefix_stat()
 
@@ -288,33 +287,19 @@ class Parser:
         self.eat(TokenType.BREAK)
         return stat
 
-    def print_stat(self):
-        """parse print_stat
-
-        print_stat : PRINT expr_list
-                   | PRINT LPAREN expr_list RPAREN
-        """
-        stat = PrintStat(exprs=None,
-                         position=self.current_token.position)
-        self.eat(TokenType.PRINT)
-        paren = False
-        if self.current_token.type == TokenType.LPAREN:
-            paren = True
-            self.eat(TokenType.LPAREN)
-        stat.exprs = self.expr_list()
-        if paren:
-            self.eat(TokenType.RPAREN)
-        return stat
-
     def identifier_prefix_stat(self):
         """parse identifier_prefix_stat: assign_stat | compoundassign_stat
 
         assign_stat         : lvalue_expr (COMMA lvalue_expr)* ASSIGN expr_list
         compoundassign_stat : lvalue_expr compoundassign expr
+        func_call_stat      : func_call
+        func_call           : lvalue_expr LPAREN (expr_list)? RPAREN
         """
         lve = self.lvalue_expr()
         if self.current_token.type in (TokenType.COMMA, TokenType.ASSIGN):
             return self.complete_assign_stat(lve)
+        elif self.current_token.type == TokenType.LPAREN:
+            return self.complete_func_call(lve, is_lve=True)
         else:
             return self.complete_compoundassign_stat(lve)
 
@@ -355,6 +340,22 @@ class Parser:
             return stat
         else:
             self.error(self.current_token, ErrorInfo.unexpected_token(self.current_token.value, 'compoundassign'))
+
+    def complete_func_call(self, pre, is_lve):
+        """complete func_call
+
+        func_call : lvalue_expr LPAREN (expr_list)? RPAREN
+        """
+        call = FuncCall(func_expr=None, arg_exprs=None, position=self.current_token.position)
+        if is_lve:
+            call.func_expr = pre
+            self.eat(TokenType.LPAREN)
+            if self.current_token.type != TokenType.RPAREN:
+                call.arg_exprs = self.expr_list()
+            self.eat(TokenType.RPAREN)
+        else:
+            self.error(self.current_token, "TODO: func_call not completed!")
+        return call
 
     def expr(self):
         """parse expr
@@ -545,6 +546,7 @@ class Parser:
         """parse primary_expr
 
         primary_expr : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN | lvalue_expr
+                     | func_call_expr
         """
         if self.current_token.type == TokenType.INT_LITERAL:
             expr = Num(self.current_token.value, is_int=True,
@@ -574,7 +576,11 @@ class Parser:
             self.eat(TokenType.RPAREN)
             return expr
         else:
-            return self.lvalue_expr()
+            lve = self.lvalue_expr()
+            if self.current_token.type == TokenType.LPAREN:
+                return self.complete_func_call(lve, is_lve=True)
+            else:
+                return lve
 
     def lvalue_expr(self):
         """parse lvalue_expr
@@ -622,42 +628,13 @@ class Parser:
 
 
 if __name__ == '__main__':
-    code = '''
-    var x,y,z,t = 1,true,'hello, world', null
-    // x = y + ------1
-    print x,y
+    if len(sys.argv) < 2:
+        print('usage: python toy.py <src.toy>')
+        sys.exit(0)
 
-    if x < 0:   ;
-    elif x < 5:    print "x > 0"
-    elif x < 10 {
-        print "x < 10"
-        x = 10
-    }
-    else {print "x >=10"; x=20;}
+    with open(sys.argv[1], 'r') as f:
+        code = f.read()
 
-
-    for i is 1,10,1:
-        print i*2
-
-    i = 0;
-    while i < 10 {
-        print i*2
-        i += 1
-    }
-
-    i = 0;
-    repeat {
-        print i*2;
-        i += 1;
-    } until i >= 10;
-
-
-    for k,v in map {
-        print k,v
-    }
-
-    ;
-    '''
     try:
         lexer = Lexer(code)
         parser = Parser(lexer)

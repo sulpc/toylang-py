@@ -98,12 +98,6 @@ class ContinueStat(AST):
         self.position = position
 
 
-class PrintStat(AST):
-    def __init__(self, exprs, position):
-        self.exprs = exprs
-        self.position = position
-
-
 class AssignStat(AST):
     def __init__(self, left_exprs, right_exprs, position):
         self.left_exprs = left_exprs
@@ -116,6 +110,13 @@ class CompoundAssignStat(AST):
         self.operator = operator
         self.left_expr = left_expr
         self.right_expr = right_expr
+        self.position = position
+
+
+class FuncCall(AST):
+    def __init__(self, func_expr, arg_exprs, position):
+        self.func_expr = func_expr
+        self.arg_exprs = arg_exprs
         self.position = position
 
 

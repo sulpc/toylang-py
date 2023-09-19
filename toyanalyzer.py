@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-toylang semantic analyzer
+toylang symbol define & semantic analyzer
 
 role:
 - insure var used after declared
 - insure temp var in for stat not be assigned
 - insure var not be duplicate declared
+
+note:
+- deprecated
 """
 from toyconfig import *
 from toytoken import *
@@ -14,7 +17,85 @@ from toylexer import *
 from toyast import *
 from toydisplayer import *
 from toyparser import *
-from toysymbol import *
+
+import sys
+from collections import OrderedDict
+
+
+class Symbol:
+    def __init__(self, identifier):
+        self.identifier = identifier
+        self.scope_level = 0
+        # self.value = None
+
+    def __str__(self) -> str:
+        return self.identifier
+
+    def __repr__(self) -> str:
+        # return f'{self.__class__.__name__}("{self.identifier}")'
+        return "{class_name}('{identifier}')".format(
+            class_name=self.__class__.__name__,
+            identifier=self.identifier,
+        )
+
+
+class BuiltinTypeSymbol(Symbol):
+    def __init__(self, identifier):
+        super().__init__(identifier)
+
+
+class VarSymbol(Symbol):
+    def __init__(self, identifier):
+        super().__init__(identifier)
+
+
+class NameSymbol(Symbol):
+    def __init__(self, identifier):
+        super().__init__(identifier)
+
+
+class ScopeSymbolTable:
+    def __init__(self, identifier, level, parent=None):
+        self.symbols = OrderedDict()
+        self.identifier = identifier
+        self.level = level
+        self.parent = parent
+        self.in_loop = False
+        self.in_function = False
+
+    def __str__(self) -> str:
+        h1 = f'SCOPE SYMBOL TABLE <{self.identifier},{self.level},{self.parent.identifier if self.parent else None}>'
+        lines = [h1, '=' * len(h1)]
+        lines.extend(
+            ['%-10s: %r' % (key, value) for key, value in self.symbols.items()]
+        )
+        lines.append('=' * len(h1))
+        s = '\n'.join(lines)
+        return s
+
+    __repr__ = __str__
+
+    def log(self, msg):
+        if CONFIG_USE_SCOPE_LOG:
+            print(msg)
+
+    def insert(self, symbol: Symbol):
+        self.log(f'insert: {symbol.identifier}. (scope: {self.identifier})')
+        symbol.scope_level = self.level
+        self.symbols[symbol.identifier] = symbol
+
+    def lookup(self, identifier, current_scope_only=False) -> Symbol:
+        self.log(f'lookup: {identifier}. (scope identifier: {self.identifier})')
+        symbol = self.symbols.get(identifier)
+
+        if current_scope_only or symbol is not None:
+            return symbol
+
+        # recursively lookup symbol in the outer scope
+        if self.parent is not None:
+            return self.parent.lookup(identifier)
+        else:
+            return None
 
 
 class SemanticAnalyzer(AstNodeVistor):
@@ -121,10 +202,6 @@ class SemanticAnalyzer(AstNodeVistor):
         if not self.current_scope.in_loop:
             self.error(node.position, ErrorInfo.invalid_continue())
 
-    def visit_PrintStat(self, node: PrintStat):
-        for expr in node.exprs:
-            self.visit(expr)
-
     def visit_AssignStat(self, node: AssignStat):
         for expr in node.left_exprs:
             if type(expr) is Name:
@@ -150,6 +227,11 @@ class SemanticAnalyzer(AstNodeVistor):
             self.visit(expr)
 
         self.visit(node.right_expr)
+
+    def visit_FuncCall(self, node: FuncCall):
+        # self.visit(node.func_expr)
+        for expr in node.arg_exprs:
+            self.visit(expr)
 
     def visit_SelectExpr(self, node: SelectExpr):
         self.visit(node.cond)
@@ -186,44 +268,12 @@ class SemanticAnalyzer(AstNodeVistor):
 
 
 if __name__ == '__main__':
-    code = '''
-    var x,y,z,t = 1,true,'hello, world', null
-    x = y + ------1
-    print x,y
+    if len(sys.argv) < 2:
+        print('usage: python toy.py <src.toy>')
+        sys.exit(0)
 
-    if x < 0:   ;
-    elif x < 5:    print "x > 0"
-    elif x < 10 {
-        print "x < 10"
-        x = 10
-    }
-    else {print "x >=10"; x=20;}
-
-
-    for i is 1,10,1:
-        print i*2
-
-    var i = 0
-    while i < 10 {
-        print i*2
-        i += 1
-    }
-
-    i = 0;
-    repeat {
-        print i*2;
-        i += 1;
-    } until i >= 10;
-
-    var map     //
-
-    for k,v in map {
-        print k,v
-    }
-
-    z = pq      // pq not define
-    ;
-    '''
+    with open(sys.argv[1], 'r') as f:
+        code = f.read()
 
     try:
         lexer = Lexer(code)
