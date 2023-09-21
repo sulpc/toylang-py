@@ -4,7 +4,9 @@ toylang error information
 """
 
 class ErrorInfo:
+    #
     # lexer error
+    #
 
     @staticmethod
     def unrecognized_char(item):
@@ -18,11 +20,9 @@ class ErrorInfo:
     def literal_string_not_end():
         return f'literal string is not end'
 
+    #
     # parser error
-
-    @staticmethod
-    def invalid_statement(start):
-        return f'invalid statement start with `{start}`'
+    #
 
     @staticmethod
     def unexpected_token(item, want):
@@ -32,53 +32,45 @@ class ErrorInfo:
     def type_not_implemented(item):
         return f'type `{item}` is not implemented'
 
-    # semantic error
+    #
+    # semantic & intepreter error
+    #
 
     @staticmethod
-    def name_duplicate_defined(item):
-        return f'name `{item}` duplicate defined'
+    def name_not_declared(item):
+        return f'name `{item}` not declared'
 
     @staticmethod
-    def name_not_defined(item):
-        return f'name `{item}` not defined'
-
-    @staticmethod
-    def name_not_callable(item):
-        return f'name `{item}` not a procedure/function'
-
-    @staticmethod
-    def wrong_arguments_call(item):
-        return f'wrong argument number in call `{item}`'
-
-    @staticmethod
-    def invalid_break():
-        return 'break outside of loop'
-
-    @staticmethod
-    def invalid_continue():
-        return 'continue outside of loop'
+    def name_duplicate_declared(item):
+        return f'name `{item}` duplicate declared'
 
     @staticmethod
     def name_not_assignable(item):
-        return f'name `{item}` is not assignable'
-
-    # intepreter error
+        return f'name `{item}` not assignable'
 
     @staticmethod
-    def name_not_created(item):
-        return f'name `{item}` is not created'
+    def name_not_callable(item):
+        return f'name `{item}` not callable'
+
+    @staticmethod
+    def invalid_syntax(item):
+        return f'invalid syntax `{item}`'
+
+    @staticmethod
+    def expr_type_error(want):
+        return f'expr type error, want `{want}`'
+
+    @staticmethod
+    def expr_value_error(msg):
+        return f'expr value error: {msg}'
 
     @staticmethod
     def op_not_implemented(item):
         return f'op `{item}` is not implemented'
 
     @staticmethod
-    def op_used_on_wrong_type(item):
-        return f'op `{item}` used on wrong type'
-
-    @staticmethod
-    def expr_convert_bool_error():
-        return f'expr  convert to bool value error'
+    def general(info):
+        return info
 
 
 class Error(Exception):
@@ -104,13 +96,14 @@ class SemanticError(Error):
     pass
 
 
-class ToyTypeError(Error):
-    def __init__(self):
-        pass
-
-    def __str__(self):
-        return ''
-
-
 class InterpreterError(Error):
     pass
+
+
+class BaseError(Exception):
+    def __init__(self, message):
+        self.message = message
+
+    def __str__(self):
+        return self.message
+

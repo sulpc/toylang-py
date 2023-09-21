@@ -166,7 +166,7 @@ class Lexer:
             return self.current_char
 
         if self.current_char == 'n':
-            self.advance
+            self.advance(1)
             return '\n'
 
         self.error(ErrorInfo.unsupport_escape(self.current_char))

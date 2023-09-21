@@ -84,6 +84,7 @@ class TokenType(Enum):
     FUNC                = 'func'
     RETURN              = 'return'
     VAR                 = 'var'
+    CONST               = 'const'
     TRUE                = 'true'
     FALSE               = 'false'
     NULL                = 'null'

@@ -1,9 +1,20 @@
 # -*- coding: utf-8 -*-
 """
 toylang value define
+NullValue    :
+BoolValue    : _val
+NumValue     : _val, is_int
+StringValue  : _val
+ListValue    :
+MapValue     :
+ObjectValue  :
+TypeValue    : _val (type str)
+HostFunction : f(argc, argv: list[Value]) -> list[Value]    # argc not need in py
 """
+
 from toytoken import *
 from toyerror import *
+
 
 class Value:
     def __str__(self):
@@ -79,10 +90,6 @@ class TypeValue(Value):
     def __str__(self):
         return self._val
 
-"""
-HostFunction all like:
-f(argc, argv: list[Value]) -> list[Value]    # argc not need in py
-"""
 
 class HostFunctionValue(Value):
     def __init__(self, name, _func):
@@ -93,71 +100,84 @@ class HostFunctionValue(Value):
         return f'{self.name}'
 
 
-def builtin_typevalues_init(table):
-    table['null'] = TypeValue('null')
-    table['bool'] = TypeValue('bool')
-    table['int'] = TypeValue('int')
-    table['float'] = TypeValue('float')
-    table['string'] = TypeValue('string')
-    table['list'] = TypeValue('list')
-    table['map'] = TypeValue('map')
-    table['function'] = TypeValue('function')
-    table['object'] = TypeValue('object')
-    # table['type'] = TypeValue('type')
-    # table['variable'] = TypeValue('variable')
+def init_builtin_typevalues(register_cb):
+    BUILTIN_TYPEVALUES = [
+        TypeValue('null'),
+        TypeValue('bool'),
+        TypeValue('int'),
+        TypeValue('float'),
+        TypeValue('string'),
+        TypeValue('list'),
+        TypeValue('map'),
+        TypeValue('function'),
+        TypeValue('object'),
+    ]
+    keys = [name._val for name in BUILTIN_TYPEVALUES]
+    register_cb(keys, BUILTIN_TYPEVALUES, True)
 
 
 class OpImpl:
     @staticmethod
     def eq(l, r):
+        if type(l) != type(r):
+            raise BaseError('operand not same type')
         return BoolValue(l._val == r._val)
 
     @staticmethod
     def lt(l, r):
-        if type(l) == NumValue and type(r) == NumValue:
-            return BoolValue(l._val < r._val)
-        else:
-            raise ToyTypeError
+        if type(l) != NumValue:
+            raise BaseError('left operand not a number')
+        if type(r) != NumValue:
+            raise BaseError('right operand not a number')
+        return BoolValue(l._val < r._val)
 
     @staticmethod
     def le(l, r):
-        if type(l) == NumValue and type(r) == NumValue:
-            return BoolValue(l._val <= r._val)
-        else:
-            raise ToyTypeError
+        if type(l) != NumValue:
+            raise BaseError('left operand not a number')
+        if type(r) != NumValue:
+            raise BaseError('right operand not a number')
+        return BoolValue(l._val <= r._val)
 
     @staticmethod
     def add(l, r):
-        if type(l) == NumValue and type(r) == NumValue:
+        if type(l) == NumValue:
+            if type(r) != NumValue:
+                raise BaseError('right operand not number')
             return NumValue(l._val + r._val, is_int=True if l.is_int and r.is_int else False)
-        elif type(l) == StringValue and type(r) in (StringValue, NumValue):
+        elif type(l) == StringValue:
+            if type(r) not in (StringValue, NumValue):
+                raise BaseError('right operand not number or string')
             return StringValue(l._val + str(r._val))
         else:
-            raise ToyTypeError
+            raise BaseError('left operand not number or string')
 
     @staticmethod
     def sub(l, r):
-        if type(l) == NumValue and type(r) == NumValue:
-            return NumValue(l._val - r._val, is_int=True if l.is_int and r.is_int else False)
-        else:
-            raise ToyTypeError
+        if type(l) != NumValue:
+            raise BaseError('left operand not number')
+        if type(r) != NumValue:
+            raise BaseError('right operand not number')
+        return NumValue(l._val - r._val, is_int=True if l.is_int and r.is_int else False)
 
     @staticmethod
     def mul(l, r):
-        if type(l) == NumValue and type(r) == NumValue:
-            return NumValue(l._val * r._val, is_int=True if l.is_int and r.is_int else False)
-        else:
-            raise ToyTypeError
+        if type(l) != NumValue:
+            raise BaseError('left operand not number')
+        if type(r) != NumValue:
+            raise BaseError('right operand not number')
+        return NumValue(l._val * r._val, is_int=True if l.is_int and r.is_int else False)
 
     @staticmethod
     def div(l, r):
-        if type(l) == NumValue and type(r) == NumValue:
-            if l.is_int and r.is_int:
-                return NumValue(l._val // r._val, is_int=True)
-            else:
-                return NumValue(l._val / r._val, is_int=False)
+        if type(l) != NumValue:
+            raise BaseError('left operand not number')
+        if type(r) != NumValue:
+            raise BaseError('right operand not number')
+        if l.is_int and r.is_int:
+            return NumValue(l._val // r._val, is_int=True)
         else:
-            raise ToyTypeError
+            return NumValue(l._val / r._val, is_int=False)
 
     # @staticmethod
     # def pow_
@@ -194,17 +214,15 @@ class OpImpl:
 
     # @staticmethod
     def add_(v):
-        if type(v) == NumValue:
-            return v
-        else:
-            raise ToyTypeError
+        if type(v) != NumValue:
+            raise BaseError('operand not number')
+        return v
 
     # @staticmethod
     def sub_(v):
-        if type(v) == NumValue:
-            return NumValue(-v._val, is_int=v.is_int)
-        else:
-            raise ToyTypeError
+        if type(v) != NumValue:
+            raise BaseError('operand not number')
+        return NumValue(-v._val, is_int=v.is_int)
 
     @staticmethod
     def not_(v):
@@ -228,7 +246,11 @@ class OpImpl:
         elif type(val) == NumValue:
             return BoolValue(val._val != 0)
         else:
-            raise ToyTypeError
+            raise BaseError('cannot convert to bool')
+
+    @staticmethod
+    def is_num(val):
+        return type(val) == NumValue
 
 
 BINOP_IMPL_TABLE = {
@@ -262,6 +284,7 @@ BINOP_IMPL_TABLE = {
     # TokenType.IS        :
     # TokenType.IN        :
 }
+
 
 UNIOP_IMPL_TABLE = {
     TokenType.ADD       : OpImpl.add_,

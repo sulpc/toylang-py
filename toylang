@@ -17,7 +17,7 @@ stat                : empty_stat
 
 empty_stat          : SEMI
 block_stat          : LBRACE stat_list RBRACE
-var_decl_stat       : VAR name_list (ASSIGN expr_list)?
+var_decl_stat       : (VAR | CONST) name_list (ASSIGN expr_list)?
 if_stat             : IF expr (COLON)? stat (ELIF expr (COLON)? stat)* (ELSE (COLON)? stat)?
 switch_stat         : SWITCH expr (COLON)? (CASE expr (COLON)? stat)+ (DEFAULT (COLON)? stat)?
 repeat_stat         : REPEAT (COLON)? stat UNTIL expr
@@ -149,3 +149,4 @@ NULL                null
 FUNC                func
 RETURN              return
 VAR                 var
+CONST               const

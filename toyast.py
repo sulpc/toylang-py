@@ -33,9 +33,10 @@ class BlockStat(AST):
 
 
 class VarDeclStat(AST):
-    def __init__(self, names, exprs, position):
+    def __init__(self, names, exprs, const, position):
         self.names = names
         self.exprs = exprs
+        self.const = const
         self.position = position
 
 

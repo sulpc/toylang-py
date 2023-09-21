@@ -2,7 +2,6 @@
 """
 toylang interpreter
 """
-from toyconfig import *
 from toyerror import *
 from toylexer import *
 from toyparser import *
@@ -10,47 +9,73 @@ from toyast import *
 from toydisplayer import *
 from toyvalue import *
 from toylib import *
+import toylog
 
 import argparse
+from enum import Enum
+
 
 class ARType(Enum):
     PROGRAM   = 'PROGRAM'
-    FUNC      = 'FUNC'
     BLOCK     = 'BLOCK'
-    FOR       = 'FOR'
+    LOOP      = 'LOOP'
+    FUNCTION  = 'FUNCTION'
+
+
+class ARState(Enum):
+    NORMAL    = 'NORMAL'
+    BREAKED   = 'BREAKED'
+    CONTINUED = 'CONTINUED'
+    RETURNED  = 'RETURNED'
 
 
 class ActivationRecord:
-    def __init__(self, name):
+    def __init__(self, name, type):
         self.name = name
-        self.members = {}
+        self.members = {}       # identifier -> [value, const]
         self.outer = None
         self.nesting_level = 0
+        # below used for function and loop
+        self.type = type
+        self.state = ARState.NORMAL
 
     def __str__(self) -> str:
-        lines = [f'{self.nesting_level}: {self.name}']
-        for name, val in self.members.items():
-            lines.append(f'    {name:<20}: {val.type():<12}: {val}')
-        return '==========================================\n' + 'ACTIVATION RECORD:\n' + '\n'.join(lines) + '\n=========================================='
+        lines = [f'{self.nesting_level}: {self.name} {self.type.value} {self.state.value}']
+        for name, vv in self.members.items():
+            lines.append(f'    {name:<20}: {vv[0].type():<12}: {vv[0]} {"const" if vv[1] else ""}')
+        return 'ACTIVATION RECORD:\n' + '\n'.join(lines)
 
     def __repr__(self):
         return self.__str__()
 
-    def __setitem__(self, key, value):
-        self.members[key] = value
+    # def __setitem__(self, key, value):
+    #     self.members[key] = value
 
-    def __getitem__(self, key):
-        return self.members[key]
+    # def __getitem__(self, key):
+    #     return self.members[key]
+
+    def set(self, key, value, const):
+        self.members[key] = [value, const]
 
     def get(self, key):
-        return self.members.get(key)
+        vv = self.members.get(key)
+        if vv is None:
+            return None, None
+        else:
+            return vv[0], vv[1]
 
     def has(self, key):
         return key in self.members
 
+    def set_values(self, keys, values, const):
+        if len(keys) != len(values):
+            raise Exception(f'keys and values must have same length: {len(keys)} != {len(values)}')
+        for k, v in zip(keys, values):
+            self.members[k] = [v, const]
+
     def init_builtins(self):
-        builtin_typevalues_init(self.members)
-        ToyLib.register(self.members)
+        init_builtin_typevalues(self.set_values)
+        ToyLib.register(self.set_values)
 
 
 class CallStack:
@@ -66,39 +91,35 @@ class CallStack:
         self.current_ar = ar
         self.current_level += 1
 
-    def pop(self) -> ActivationRecord:
+    def pop(self):
         self.current_level -= 1
         self.current_ar = self.current_ar.outer
         return self.stack.pop()
 
     def __str__(self):
-        s = '\n'.join(repr(ar) for ar in reversed(self.stack))
-        return f'CALL STACK:\n{s}\n'
+        s = '\n----------------------------------------\n'.join(repr(ar) for ar in reversed(self.stack))
+        return f'CALL STACK:\n========================================\n{s}\n========================================\n'
 
 
 class Interpreter(AstNodeVistor):
     def __init__(self):
         self.call_stack = CallStack()
 
-        ar = ActivationRecord('__global')
+        ar = ActivationRecord('__global', type=ARType.PROGRAM)
         ar.init_builtins()
         self.enter_ar(ar)
 
     def error(self, position, message):
         raise InterpreterError(position, message)
 
-    def log(self, msg):
-        if CONFIG_USE_INTERPRETER_LOG:
-            print(msg)
-
     def enter_ar(self, ar: ActivationRecord):
         self.call_stack.push(ar)
-        self.log(f'enter ar: {ar.name}')
-        self.log(self.call_stack)
+        toylog.debug(f'enter ar: {ar.name}')
+        toylog.debug(self.call_stack)
 
     def exit_ar(self):
-        self.log(f'leave: {self.call_stack.current_ar.name}')
-        self.log(self.call_stack)
+        toylog.debug(f'leave: {self.call_stack.current_ar.name}')
+        toylog.debug(self.call_stack)
         self.call_stack.pop()
 
     def visit_Program(self, node: Program):
@@ -113,24 +134,33 @@ class Interpreter(AstNodeVistor):
         pass
 
     def visit_BlockStat(self, node: BlockStat):
-        ar = ActivationRecord('block')
+        ar = ActivationRecord(f'block<{node.position[0]}:{node.position[1]}>', ARType.BLOCK)
         self.enter_ar(ar)
         for stat in node.stats:
             self.visit(stat)
+            if ar.state == ARState.BREAKED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} pass break')
+                break
+            elif ar.state == ARState.CONTINUED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} pass continue')
+                break
         self.exit_ar()
 
     def visit_VarDeclStat(self, node: VarDeclStat):
         for i in range(len(node.names)):
             name = node.names[i]
             right_expr = node.exprs[i] if node.exprs and i < len(node.exprs) else None
-            self.call_stack.current_ar[name.identifier] = self.visit(right_expr) if right_expr else NullValue()
+            self.decl_Name(name, self.visit(right_expr) if right_expr else NullValue(),
+                           const=node.const)
 
     def visit_IfStat(self, node: IfStat):
         for cond_expr, stat in zip(node.cond_exprs, node.stats):
             try:
                 cond_value = OpImpl.value_to_bool(self.visit(cond_expr))
-            except ToyTypeError:
-                self.error(cond_expr.position, ErrorInfo.expr_convert_bool_error())
+            except BaseError as e:
+                self.error(cond_expr.position, ErrorInfo.expr_value_error(e.message))
             if cond_value._val:
                 self.visit(stat)
                 return
@@ -148,29 +178,109 @@ class Interpreter(AstNodeVistor):
             self.visit(node.default_stat)
 
     def visit_RepeatStat(self, node: RepeatStat):
+        ar = ActivationRecord(f'repeat<{node.position[0]}:{node.position[1]}>', ARType.LOOP)
+        self.enter_ar(ar)
         while True:
             self.visit(node.stat)
+            if ar.state == ARState.BREAKED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} handle break')
+                break
+            elif ar.state == ARState.CONTINUED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} handle continue')
+                # do nothing
             try:
                 expr_val = OpImpl.value_to_bool(self.visit(node.expr))
-            except ToyTypeError:
-                self.error(node.expr.position, ErrorInfo.expr_convert_bool_error())
+            except BaseError as e:
+                self.error(node.expr.position, ErrorInfo.expr_value_error(e.message))
             if expr_val._val:
                 break
+        self.exit_ar()
 
     def visit_WhileStat(self, node: WhileStat):
-        pass
+        ar = ActivationRecord(f'while<{node.position[0]}:{node.position[1]}>', ARType.LOOP)
+        self.enter_ar(ar)
+        while True:
+            try:
+                expr_val = OpImpl.value_to_bool(self.visit(node.expr))
+            except BaseError as e:
+                self.error(node.expr.position, ErrorInfo.expr_value_error(e.message))
+            if expr_val._val:
+                self.visit(node.stat)
+                if ar.state == ARState.BREAKED:
+                    ar.state = ARState.NORMAL
+                    toylog.info(f'[!] {ar.name:<12} handle break')
+                    break
+                elif ar.state == ARState.CONTINUED:
+                    ar.state = ARState.NORMAL
+                    toylog.info(f'[!] {ar.name:<12} handle continue')
+                    # do nothing
+            else:
+                break
+        self.exit_ar()
 
     def visit_ForloopStat(self, node: ForloopStat):
-        pass
+        ar = ActivationRecord(f'for<{node.position[0]}:{node.position[1]}>', ARType.LOOP)
+        self.enter_ar(ar)
+        # cal start_val, end_val, step_val
+        start_val = self.visit(node.start_expr)
+        if not OpImpl.is_num(start_val):
+            self.error(node.start_expr.position, ErrorInfo.expr_type_error('num'))
+        end_val = self.visit(node.end_expr)
+        if not OpImpl.is_num(end_val):
+            self.error(node.end_expr.position, ErrorInfo.expr_type_error('num'))
+        step_val = self.visit(node.step_expr) if node.step_expr else NumValue(1, is_int=True)
+        # create index var
+        self.decl_Name(node.var_name, start_val, const=True)
+
+        while True:
+            val = self.visit(node.var_name)
+            if OpImpl.lt(val, end_val)._val:
+                self.visit(node.stat)
+                if ar.state == ARState.BREAKED:
+                    ar.state = ARState.NORMAL
+                    toylog.info(f'[!] {ar.name:<12} handle break')
+                    break
+                elif ar.state == ARState.CONTINUED:
+                    ar.state = ARState.NORMAL
+                    toylog.info(f'[!] {ar.name:<12} handle continue')
+                    # do nothing
+                self.set_Name(node.var_name, OpImpl.add(val, step_val), force=True)
+            else:
+                break
+
+        self.exit_ar()
 
     def visit_ForeachStat(self, node: ForeachStat):
-        pass
+        ar = ActivationRecord(f'for<{node.position[0]}:{node.position[1]}>', ARType.LOOP)
+        self.enter_ar(ar)
+        # TODO
+        self.exit_ar()
 
     def visit_BreakStat(self, node: BreakStat):
-        pass
+        ar = self.call_stack.current_ar
+        while ar is not None:
+            ar.state = ARState.BREAKED
+            toylog.info(f'[!] {ar.name:<12} set break')
+            if ar.type == ARType.LOOP:
+                return
+            elif ar.type == ARType.FUNCTION:
+                break
+            ar = ar.outer
+        self.error(node.position, ErrorInfo.invalid_syntax('break'))
 
     def visit_ContinueStat(self, node: ContinueStat):
-        pass
+        ar = self.call_stack.current_ar
+        while ar is not None:
+            ar.state = ARState.CONTINUED
+            toylog.info(f'[!] {ar.name:<12} set continue')
+            if ar.type == ARType.LOOP:
+                return
+            elif ar.type == ARType.FUNCTION:
+                break
+            ar = ar.outer
+        self.error(node.position, ErrorInfo.invalid_syntax('continue'))
 
     def visit_AssignStat(self, node: AssignStat):
         for i in range(len(node.left_exprs)):
@@ -190,8 +300,8 @@ class Interpreter(AstNodeVistor):
             if node.operator in BINOP_IMPL_TABLE:
                 try:
                     new_val = BINOP_IMPL_TABLE[node.operator](self.visit(left_expr), self.visit(right_expr))
-                except ToyTypeError:
-                    self.error(node.position, ErrorInfo.op_used_on_wrong_type(node.operator.value))
+                except BaseError as e:
+                    self.error(node.position, ErrorInfo.expr_value_error(e.message))
                 self.set_Name(left_expr, new_val)
             else:
                 self.error(node.position, ErrorInfo.op_not_implemented(node.operator.value))
@@ -206,7 +316,11 @@ class Interpreter(AstNodeVistor):
             if node.arg_exprs:
                 for arg_expr in node.arg_exprs:
                     args.append(self.visit(arg_expr))
-            result = func_val._func(args)
+            try:
+                result = func_val._func(args)
+            except BaseError as e:
+                self.error(node.position, ErrorInfo.general(e.message))
+
             if result:
                 assert(type(result) == list)
                 # TODO: when function return multi values
@@ -219,8 +333,8 @@ class Interpreter(AstNodeVistor):
     def visit_SelectExpr(self, node: SelectExpr):
         try:
             cond_val = OpImpl.value_to_bool(self.visit(node.cond))
-        except ToyTypeError:
-            self.error(cond_val.position, ErrorInfo.expr_convert_bool_error())
+        except BaseError as e:
+            self.error(node.cond.position, ErrorInfo.expr_value_error(e.message))
         if cond_val._val:
             return self.visit(node.expr1)
         else:
@@ -247,8 +361,8 @@ class Interpreter(AstNodeVistor):
                 result = BINOP_IMPL_TABLE[operator](left_val, right_val)
                 if reverse:    # must be a bool
                     result._val = not result._val
-            except ToyTypeError:
-                self.error(node.position, ErrorInfo.op_used_on_wrong_type(operator.value))
+            except BaseError as e:
+                self.error(node.position, ErrorInfo.expr_value_error(e.message))
             return result
         else:
             self.error(node.position, ErrorInfo.op_not_implemented(operator.value))
@@ -260,22 +374,14 @@ class Interpreter(AstNodeVistor):
         if node.operator in UNIOP_IMPL_TABLE:
             try:
                 result = UNIOP_IMPL_TABLE[node.operator](expr_value)
-            except ToyTypeError:
-                self.error(node.position, ErrorInfo.op_used_on_wrong_type(node.operator.value))
+            except BaseError as e:
+                self.error(node.position, ErrorInfo.expr_value_error(e.message))
             return result
         else:
             self.error(node.position, ErrorInfo.op_not_implemented(node.operator.value))
 
     def visit_Name(self, node: Name):
-        identifier = node.identifier
-        ar = self.call_stack.current_ar
-        while ar is not None:
-            value = ar.get(identifier)
-            if value is not None:
-                return value
-            else:
-                ar = ar.outer
-        self.error(node.position, ErrorInfo.name_not_created(identifier))
+        return self.get_Name(node)
 
     def visit_Num(self, node: Num):
         if node.is_int:
@@ -292,15 +398,42 @@ class Interpreter(AstNodeVistor):
     def visit_Null(self, node: Null):
         return NullValue()
 
-    def set_Name(self, name: Name, value):
+    def decl_Name(self, name: Name, value: Value, const: bool):
         ar = self.call_stack.current_ar
+        identifier = name.identifier
+        if ar.has(identifier):
+            self.error(name.position, ErrorInfo.name_duplicate_declared(identifier))
+        ar.set(identifier, value, const)
+
+    def set_Name(self, name: Name, value: Value, force=False):
+        '''set value to a name
+
+        Args:
+          force: set value to a constant forcibly
+        '''
+        ar = self.call_stack.current_ar
+        identifier = name.identifier
         while ar is not None:
-            if ar.has(name.identifier):
-                ar[name.identifier] = value
+            if ar.has(identifier):
+                _, const = ar.get(identifier)
+                if const and not force:    # it's a constant
+                    self.error(name.position, ErrorInfo.name_not_assignable(identifier))
+                ar.set(identifier, value, const)
                 return
             else:
                 ar = ar.outer
-        self.error(name.position, ErrorInfo.name_not_created(name.identifier))
+        self.error(name.position, ErrorInfo.name_not_declared(identifier))
+
+    def get_Name(self, name: Name):
+        ar = self.call_stack.current_ar
+        identifier = name.identifier
+        while ar is not None:
+            value, const = ar.get(identifier)
+            if value is not None:
+                return value
+            else:
+                ar = ar.outer
+        self.error(name.position, ErrorInfo.name_not_declared(identifier))
 
     def set_Field(self, name: Name, field: Value, value: Value):
         pass
@@ -308,18 +441,26 @@ class Interpreter(AstNodeVistor):
     def interpret(self, tree):
         self.visit(tree)
 
+    def finish(self):
+        toylog.debug('program finish')
+        toylog.debug(self.call_stack)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='toylang interpreter')
     parser.add_argument('--src', help='source file')
     parser.add_argument('--repl', action='store_true', help='repl mode')
+    parser.add_argument('--level', type=int, help='log level')
     args = parser.parse_args()
+
+    if args.level:
+        toylog.set_log_level(args.level)
 
     interpreter = Interpreter()
 
     if args.src:
         try:
-            with open(args.src, 'r') as f:
+            with open(args.src, 'r', encoding='utf-8') as f:
                 code = f.read()
 
             lexer = Lexer(code)
@@ -330,15 +471,16 @@ if __name__ == '__main__':
             displayer.display()
 
             interpreter.interpret(tree)
+            interpreter.finish()
         except (LexerError, ParserError, SemanticError, InterpreterError) as e:
             print(e)
-            raise e
+            interpreter.finish()
     # elif args.repl:
     else:
         text = ''
         while True:
             try:
-                line = input('>>> ').strip()
+                line = input('toy> ').strip()
 
                 if len(line) == 0:
                     continue

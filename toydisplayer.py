@@ -2,12 +2,14 @@
 """
 toylang ast displayer
 """
-from toyconfig import *
 from toyast import *
 
 from pyecharts import options as opts
 from pyecharts.charts import Tree
 import os
+
+
+CONFIG_USE_LOCAL_ECHARTS = True
 
 
 class Displayer(AstNodeVistor):

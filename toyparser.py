@@ -71,7 +71,7 @@ class Parser:
             return self.empty_stat()
         elif self.current_token.type == TokenType.LBRACE:       # { block_stat
             return self.block_stat()
-        elif self.current_token.type == TokenType.VAR:
+        elif self.current_token.type in (TokenType.VAR, TokenType.CONST):
             return self.var_decl_stat()
         elif self.current_token.type == TokenType.IF:
             return self.if_stat()
@@ -113,11 +113,12 @@ class Parser:
     def var_decl_stat(self):
         """parse var_decl_stat
 
-        var_decl_stat : VAR name_list (ASSIGN expr_list)?
+        var_decl_stat : (VAR | CONST) name_list (ASSIGN expr_list)?
         """
-        stat = VarDeclStat(names=None, exprs=None,
+        const = True if self.current_token.type == TokenType.CONST else False
+        stat = VarDeclStat(names=None, exprs=None, const=const,
                            position=self.current_token.position)
-        self.eat(TokenType.VAR)
+        self.eat(self.current_token.type)               # VAR or CONST
         stat.names = self.name_list()
         if self.current_token.type == TokenType.ASSIGN:
             self.eat(TokenType.ASSIGN)
@@ -284,7 +285,7 @@ class Parser:
         continue_stat : CONTINUE
         """
         stat = ContinueStat(position=self.current_token.position)
-        self.eat(TokenType.BREAK)
+        self.eat(TokenType.CONTINUE)
         return stat
 
     def identifier_prefix_stat(self):

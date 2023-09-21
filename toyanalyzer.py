@@ -10,8 +10,6 @@ role:
 note:
 - deprecated
 """
-from toyconfig import *
-from toytoken import *
 from toyerror import *
 from toylexer import *
 from toyast import *
@@ -20,6 +18,10 @@ from toyparser import *
 
 import sys
 from collections import OrderedDict
+
+
+CONFIG_USE_SCOPE_LOG    = False
+CONFIG_USE_ANALYZER_LOG = False
 
 
 class Symbol:
@@ -147,7 +149,7 @@ class SemanticAnalyzer(AstNodeVistor):
     def visit_VarDeclStat(self, node: VarDeclStat):
         for name in node.names:
             if self.current_scope.lookup(name.identifier, current_scope_only=True) is not None:
-                self.error(node.position, ErrorInfo.name_duplicate_defined(name.identifier))
+                self.error(node.position, ErrorInfo.name_duplicate_declared(name.identifier))
             var_symbol = VarSymbol(identifier=name.identifier)
             self.current_scope.insert(var_symbol)
         if node.exprs is not None:
@@ -196,18 +198,18 @@ class SemanticAnalyzer(AstNodeVistor):
 
     def visit_BreakStat(self, node: BreakStat):
         if not self.current_scope.in_loop:
-            self.error(node.position, ErrorInfo.invalid_break())
+            self.error(node.position, ErrorInfo.invalid_syntax('break'))
 
     def visit_ContinueStat(self, node: ContinueStat):
         if not self.current_scope.in_loop:
-            self.error(node.position, ErrorInfo.invalid_continue())
+            self.error(node.position, ErrorInfo.invalid_syntax('continue'))
 
     def visit_AssignStat(self, node: AssignStat):
         for expr in node.left_exprs:
             if type(expr) is Name:
                 name_symbol = self.current_scope.lookup(expr.identifier)
                 if name_symbol is None:
-                    self.error(expr.position, ErrorInfo.name_not_defined(expr.identifier))
+                    self.error(expr.position, ErrorInfo.name_not_declared(expr.identifier))
                 elif type(name_symbol) is not VarSymbol:
                     self.error(expr.position, ErrorInfo.name_not_assignable(expr.identifier))
             else:
@@ -220,7 +222,7 @@ class SemanticAnalyzer(AstNodeVistor):
         if type(expr) is Name:
             name_symbol = self.current_scope.lookup(expr.identifier)
             if name_symbol is None:
-                self.error(expr.position, ErrorInfo.name_not_defined(expr.identifier))
+                self.error(expr.position, ErrorInfo.name_not_declared(expr.identifier))
             elif type(name_symbol) is not VarSymbol:
                 self.error(expr.position, ErrorInfo.name_not_assignable(expr.identifier))
         else:
@@ -247,7 +249,7 @@ class SemanticAnalyzer(AstNodeVistor):
 
     def visit_Name(self, node: Name):
         if self.current_scope.lookup(node.identifier) is None:
-            self.error(node.position, ErrorInfo.name_not_defined(node.identifier))
+            self.error(node.position, ErrorInfo.name_not_declared(node.identifier))
 
     def visit_Num(self, node: Num):
         pass
