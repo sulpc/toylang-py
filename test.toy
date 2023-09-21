@@ -1,0 +1,70 @@
+// draw a WIDTH * WIDTH square containing a rhombus in it
+
+const WIDTH = input('input width: ', int)
+
+// top half
+for line is 0,WIDTH/2 {
+    var points = WIDTH/2 - line
+
+    var i = 0
+    while i < points {
+        print('[]')
+        i+=1
+    }
+    if i < WIDTH/2 {
+        print('  ')
+        i+=1
+    }
+    while i < WIDTH/2 {
+        print('[]')
+        i+=1
+    }
+
+    while i < WIDTH-points-1 {
+        print('[]')
+        i+=1
+    }
+    if i < WIDTH-points {
+        print('  ')
+        i+=1
+    }
+    while i < WIDTH {
+        print('[]')
+        i+=1
+    }
+
+    println()
+}
+
+// bottom half
+for line is WIDTH/2,WIDTH {
+    var points = line - WIDTH/2 + 1
+
+    var i = 0
+    while i < points {
+        print('[]')
+        i+=1
+    }
+    if i < WIDTH/2 {
+        print('  ')
+        i+=1
+    }
+    while i < WIDTH/2 {
+        print('[]')
+        i+=1
+    }
+
+    while i < WIDTH-points-1 {
+        print('[]')
+        i+=1
+    }
+    if i < WIDTH-points {
+        print('  ')
+        i+=1
+    }
+    while i < WIDTH {
+        print('[]')
+        i+=1
+    }
+    println()
+}
