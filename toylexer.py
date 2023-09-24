@@ -24,8 +24,7 @@ class Lexer:
     def advance(self, n=1):
         """advance n char, refresh current_char
         """
-        if n > self.residual:
-            raise Exception(f'something error')
+        assert(n <= self.residual)
 
         for i in range(n):
             self.col += 1
@@ -145,7 +144,7 @@ class Lexer:
                 self.error(ErrorInfo.literal_string_not_end())
 
             if self.current_char == '\r':
-                self.advance()              # NOTE: '\r' is ignored
+                self.advance()              # '\r' is ignored
                 continue
             if self.current_char == '\\':   # escape
                 result += self.escape()

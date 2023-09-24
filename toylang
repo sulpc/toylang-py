@@ -11,6 +11,8 @@ stat                : empty_stat
                     | foreach_stat
                     | break_stat
                     | continue_stat
+                    | func_decl_stat
+                    | return_stat
                     | assign_stat
                     | compoundassign_stat
                     | func_call_stat
@@ -26,6 +28,8 @@ forloop_stat        : FOR name IS expr COMMA expr (COMMA expr)? (COLON)? stat
 foreach_stat        : FOR name (COMMA name)? IN expr (COLON)? stat
 break_stat          : BREAK
 continue_stat       : CONTINUE
+func_decl_stat      : FUNC name func_body
+return_stat         : RETURN (expr | SEMI)
 assign_stat         : lvalue_expr (COMMA lvalue_expr)* ASSIGN expr_list
 compoundassign_stat : lvalue_expr compoundassign expr
 func_call_stat      : func_call
@@ -44,18 +48,21 @@ addition_expr       : multiple_expr ((ADD | SUB) multiple_expr)*
 multiple_expr       : unary_expr ((MUL | DIV | MOD) unary_expr)*
 unary_expr          : (unop)* pow_expr
 pow_expr            : primary_expr (POW primary_expr)*
-primary_expr        : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN | lvalue_expr
-                    | func_call_expr
-
-func_def_expr       :
+primary_expr        : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN |
+                    | list_ctor_expr | map_ctor_expr | func_def_expr |
+                    | lvalue_expr | func_call_expr
+list_ctor_expr      : LBRACK (expr_list)? RBRACK
+map_ctor_expr       : LBRACE (expr (COLON expr)? (COMMA expr (COLON expr)?)*)? RBRACE
+func_def_expr       : FUNC func_def
+lvalue_expr         : name | lvalue_expr LBRACK expr RBRACK | lvalue_expr DOT name
 func_call_expr      : func_call
-list_ctor_expr      :
-map_ctor_expr       :
-slice_expr          :
-lvalue_expr         : name
-func_call           : lvalue_expr LPAREN (expr_list)? RPAREN
+
 name_list           : name (COMMA name)*
 expr_list           : expr (COMMA expr)*
+param_list          : name_list (COMMA VARARG)? | VARARG
+func_def            : LPAREN (param_list)? RPAREN LBRACE stat_list RBRACE
+func_call           : lvalue_expr LPAREN (expr_list)? RPAREN
+                    | func_def_expr LPAREN (expr_list)? RPAREN
 
 name                : IDENTIFIER
 compoundassign      : SELF_ADD | SELF_SUB | SELF_MUL | SELF_DIV | SELF_POW | SELF_MOD

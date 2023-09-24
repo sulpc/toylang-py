@@ -204,6 +204,9 @@ class SemanticAnalyzer(AstNodeVistor):
         if not self.current_scope.in_loop:
             self.error(node.position, ErrorInfo.invalid_syntax('continue'))
 
+    def visit_ReturnStat(self, node: ReturnStat):
+        raise Exception('TODO: not implement!')
+
     def visit_AssignStat(self, node: AssignStat):
         for expr in node.left_exprs:
             if type(expr) is Name:
@@ -230,6 +233,9 @@ class SemanticAnalyzer(AstNodeVistor):
 
         self.visit(node.right_expr)
 
+    def visit_FuncDef(self, node: FuncDef):
+        raise Exception('TODO: not implement!')
+
     def visit_FuncCall(self, node: FuncCall):
         # self.visit(node.func_expr)
         for expr in node.arg_exprs:
@@ -246,6 +252,15 @@ class SemanticAnalyzer(AstNodeVistor):
 
     def visit_UniOpExpr(self, node: UniOpExpr):
         self.visit(node.expr)
+
+    def visit_ListCtorExpr(self, node: ListCtorExpr):
+        raise Exception('TODO: not implement!')
+
+    def visit_MapCtorExpr(self, node: MapCtorExpr):
+        raise Exception('TODO: not implement!')
+
+    def visit_AccessExpr(self, node: AccessExpr):
+        raise Exception('TODO: not implement!')
 
     def visit_Name(self, node: Name):
         if self.current_scope.lookup(node.identifier) is None:

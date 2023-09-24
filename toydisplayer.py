@@ -35,11 +35,12 @@ class Displayer(AstNodeVistor):
 
     def visit_VarDeclStat(self, node: VarDeclStat):
         data = {'name': 'decl', 'children': []}
+        # names
         names = {'name': 'names', 'children': []}
         for name in node.names:
             names['children'].append(self.visit(name))
         data['children'].append(names)
-
+        # values
         if node.exprs is not None:
             values = {'name': 'values', 'children': []}
             for expr in node.exprs:
@@ -56,8 +57,10 @@ class Displayer(AstNodeVistor):
     def visit_SwitchStat(self, node: SwitchStat):
         data = {'name': 'switch', 'children': []}
         data['children'].append({'name': 'expr', 'children': [self.visit(node.expr)]})
+        # cases
         for case, stat in zip(node.case_exprs, node.case_stats):
             data['children'].append({'name': 'case', 'children': [self.visit(case), self.visit(stat)]})
+        # default
         data['children'].append({'name': 'default', 'children': [self.visit(node.default_stat)]})
         return data
 
@@ -76,26 +79,26 @@ class Displayer(AstNodeVistor):
     def visit_ForloopStat(self, node: ForloopStat):
         data = {'name': 'forloop', 'children': []}
         data['children'].append({'name': 'idx', 'children': [self.visit(node.var_name)]})
-
+        # loop range
         rg = {'name': 'range', 'children': []}
         rg['children'].append({'name': 'start', 'children': [self.visit(node.start_expr)]})
         rg['children'].append({'name': 'end', 'children': [self.visit(node.end_expr)]})
         if node.step_expr is not None:
             rg['children'].append({'name': 'step', 'children': [self.visit(node.step_expr)]})
         data['children'].append(rg)
-
+        # stat
         data['children'].append({'name': 'do', 'children': [self.visit(node.stat)]})
         return data
 
     def visit_ForeachStat(self, node: ForeachStat):
         data = {'name': 'foreach', 'children': []}
-
+        # k/v var name
         kv = {'name': 'k/v', 'children': []}
         kv['children'].append(self.visit(node.key_name))
         if node.val_name is not None:
             kv['children'].append(self.visit(node.val_name))
         data['children'].append(kv)
-
+        # in & do
         data['children'].append({'name': 'in', 'children': [self.visit(node.expr)]})
         data['children'].append({'name': 'do', 'children': [self.visit(node.stat)]})
         return data
@@ -106,6 +109,10 @@ class Displayer(AstNodeVistor):
 
     def visit_ContinueStat(self, node: ContinueStat):
         data = {'name': 'continue'}
+        return data
+
+    def visit_ReturnStat(self, node: ReturnStat):
+        data = {'name': 'return', 'children': [self.visit(node.expr)]}
         return data
 
     def visit_AssignStat(self, node: AssignStat):
@@ -124,6 +131,23 @@ class Displayer(AstNodeVistor):
         data = {'name': f'{node.operator.value}', 'children': []}
         data['children'].append(self.visit(node.left_expr))
         data['children'].append(self.visit(node.right_expr))
+        return data
+
+    def visit_FuncDef(self, node: FuncDef):
+        data = {'name': f'func', 'children': []}
+        # params
+        params = {'name': f'params', 'children': []}
+        if node.param_names:
+            for name in node.param_names:
+                params['children'].append(self.visit(name))
+        if node.vararg:
+            params['children'].append({'name': '...'})
+        # stats
+        body = {'name': f'body', 'children': []}
+        for stat in node.body:
+            body['children'].append(self.visit(stat))
+        data['children'].append(params)
+        data['children'].append(body)
         return data
 
     def visit_FuncCall(self, node: FuncCall):
@@ -152,6 +176,28 @@ class Displayer(AstNodeVistor):
     def visit_UniOpExpr(self, node: UniOpExpr):
         data = {'name': f'{node.operator.value}', 'children': []}
         data['children'].append(self.visit(node.expr))
+        return data
+
+    def visit_ListCtorExpr(self, node: ListCtorExpr):
+        data = {'name': f'list', 'children': []}
+        for expr in node.exprs:
+            data['children'].append(self.visit(expr))
+        return data
+
+    def visit_MapCtorExpr(self, node: MapCtorExpr):
+        data = {'name': f'map', 'children': []}
+        for key, value in zip(node.key_exprs, node.value_exprs):
+            pair = {'name': f'pair', 'children': []}
+            pair['children'].append(self.visit(key))
+            if value is not None:
+                pair['children'].append(self.visit(value))
+            data['children'].append(pair)
+        return data
+
+    def visit_AccessExpr(self, node: AccessExpr):
+        data = {'name': f'{"." if node.dot else "[]"}', 'children': []}
+        data['children'].append(self.visit(node.container_expr))
+        data['children'].append(self.visit(node.key_expr))
         return data
 
     def visit_Name(self, node: Name):
