@@ -1,0 +1,16 @@
+func max(a, b) {
+    println('recv args:', a, b)
+    if (a > b) {
+        return a
+    } else
+        return b
+}
+
+println(max)
+
+var i1 = input('Enter a number: ', int)
+var i2 = input('Enter a number: ', int)
+
+var x = max(i1, i2)
+
+println(x)

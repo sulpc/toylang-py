@@ -313,14 +313,18 @@ class Interpreter(AstNodeVistor):
         for i in range(len(node.left_exprs)):
             left_expr = node.left_exprs[i]
             right_val = self.visit(node.right_exprs[i]) if i < len(node.right_exprs) else NullValue()
-
-            if type(left_expr) == Name:      # NAME = .*
+            # name
+            if type(left_expr) == Name:
                 self.set_Name(left_expr, right_val)
-            else:                            # NAME.NAME | NAME[expr]
+            # lvalue_expr LBRACK expr RBRACK | lvalue_expr DOT name
+            else:
                 assert(type(left_expr) == AccessExpr)
+                c = self.visit(left_expr.expr)
+                if type(c) not in (ListValue, MapValue):
+                    self.error(left_expr.expr.position, ErrorInfo.general('expr not list or map'))
                 try:
-                    OpImpl.set_member(container=self.visit(left_expr.expr),
-                                      key=self.visit(left_expr.key_expr),
+                    OpImpl.set_member(container=c,
+                                      key=self.visit(left_expr.field_expr),
                                       value=right_val)
                 except MemberAccessError as e:
                     self.error(left_expr.position, ErrorInfo.general(e.message))
@@ -368,24 +372,25 @@ class Interpreter(AstNodeVistor):
             ar = ActivationRecord(f'{func_val.signature}<{node.position[0]}:{node.position[1]}>', ARType.FUNCTION)
             # set args
             i = 0
-            while i < len(func_ast.param_names):
-                identifier = func_ast.param_names[i].identifier
-                arg_expr = node.arg_exprs[i] if node.arg_exprs and i < len(node.arg_exprs) else None
-                arg_val = self.visit(arg_expr) if arg_expr else None
-                ar.set(identifier, arg_val, const=False)
-                i += 1
+            if func_ast.param_names:
+                while i < len(func_ast.param_names):
+                    identifier = func_ast.param_names[i].identifier
+                    arg_expr = node.arg_exprs[i] if node.arg_exprs and i < len(node.arg_exprs) else None
+                    arg_val = self.visit(arg_expr) if arg_expr else None
+                    ar.set(identifier, arg_val, const=False)
+                    i += 1
             if func_ast.vararg and i < len(node.arg_exprs):
                 self.error(node.position, "TODO: vararg")
             # exec func body
             self.enter_ar(ar)
             # similar to block
-            for stat in node.stats:
+            for stat in func_ast.body:
                 self.visit(stat)
                 if ar.state == ARState.RETURNED:
                     ar.state = ARState.NORMAL
                     toylog.info(f'[!] {ar.name:<12} handle return')
                     break
-            retval = ar.retval
+            retval = ar.retval if ar.retval else NullValue()
             self.exit_ar()
             return retval
 
@@ -440,25 +445,33 @@ class Interpreter(AstNodeVistor):
             self.error(node.position, ErrorInfo.op_not_implemented(node.operator.value))
 
     def visit_ListCtorExpr(self, node: ListCtorExpr):
-        value = []
-        for expr in node.exprs:
-            value.append(self.visit(expr))
-        return ListValue(value)
+        value = ListValue(_val=[])
+        if node.exprs:
+            for expr in node.exprs:
+                value._val.append(self.visit(expr))
+        return value
 
     def visit_MapCtorExpr(self, node: MapCtorExpr):
-        value = {}
+        value = MapValue(_val={})
         for key_expr, value_expr in zip(node.key_exprs, node.value_exprs):
             key = self.visit(key_expr)
-            value[key] = self.visit(value_expr) if value_expr else NullValue()
-        return MapValue(value)
+            OpImpl.set_member(value, key, self.visit(value_expr) if value_expr else NullValue())
+        return value
+
+    def visit_SetCtorExpr(self, node: SetCtorExpr):
+        self.error(node.position, 'TODO: set not implement!')
 
     def visit_AccessExpr(self, node: AccessExpr):
         container = self.visit(node.expr)
-        key = self.visit(node.key_expr)
-        try:
-            return OpImpl.get_member(container, key)
-        except MemberAccessError as e:
-            self.error(node.position, ErrorInfo.general(e.message))
+        key = self.visit(node.field_expr)
+
+        if type(container) in (ListValue, MapValue):
+            try:
+                return OpImpl.get_member(container, key)
+            except MemberAccessError as e:
+                self.error(node.position, ErrorInfo.general(e.message))
+        else:
+            self.error(node.position, 'TODO: built-in field access not implement!')
 
     def visit_Name(self, node: Name):
         return self.get_Name(node)
@@ -579,6 +592,7 @@ if __name__ == '__main__':
                 displayer.display()
 
                 interpreter.interpret(tree)
+                print()
             except (LexerError, ParserError, SemanticError, InterpreterError) as e:
                 print(e)
                 # raise e

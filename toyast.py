@@ -175,10 +175,16 @@ class MapCtorExpr(AST):
         self.position = position
 
 
+class SetCtorExpr(AST):
+    def __init__(self, exprs, position):
+        self.exprs = exprs
+        self.position = position
+
+
 class AccessExpr(AST):
-    def __init__(self, expr, key_expr, dot: bool, position):
+    def __init__(self, expr, field_expr, dot: bool, position):
         self.expr = expr
-        self.key_expr = key_expr
+        self.field_expr = field_expr
         self.dot = dot
         self.position = position
 

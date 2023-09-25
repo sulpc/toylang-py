@@ -112,7 +112,11 @@ class Displayer(AstNodeVistor):
         return data
 
     def visit_ReturnStat(self, node: ReturnStat):
-        data = {'name': 'return', 'children': [self.visit(node.expr)]}
+        data = {'name': 'return', 'children': []}
+        if node.expr:
+            data['children'].append(self.visit(node.expr))
+        else:
+            data['children'].append({'name': ';'})
         return data
 
     def visit_AssignStat(self, node: AssignStat):
@@ -180,8 +184,9 @@ class Displayer(AstNodeVistor):
 
     def visit_ListCtorExpr(self, node: ListCtorExpr):
         data = {'name': f'list', 'children': []}
-        for expr in node.exprs:
-            data['children'].append(self.visit(expr))
+        if node.exprs:
+            for expr in node.exprs:
+                data['children'].append(self.visit(expr))
         return data
 
     def visit_MapCtorExpr(self, node: MapCtorExpr):
@@ -194,10 +199,17 @@ class Displayer(AstNodeVistor):
             data['children'].append(pair)
         return data
 
+    def visit_SetCtorExpr(self, node: SetCtorExpr):
+        data = {'name': f'set', 'children': []}
+        if node.exprs:
+            for expr in node.exprs:
+                data['children'].append(self.visit(expr))
+        return data
+
     def visit_AccessExpr(self, node: AccessExpr):
         data = {'name': f'{"." if node.dot else "[]"}', 'children': []}
-        data['children'].append(self.visit(node.container_expr))
-        data['children'].append(self.visit(node.key_expr))
+        data['children'].append(self.visit(node.expr))
+        data['children'].append(self.visit(node.field_expr))
         return data
 
     def visit_Name(self, node: Name):

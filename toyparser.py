@@ -576,7 +576,7 @@ class Parser:
         """parse primary_expr
 
         primary_expr  : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN
-                      | list_ctor_expr | map_ctor_expr | func_def_expr |
+                      | list_ctor_expr | map_ctor_expr | set_ctor_expr | func_def_expr |
                       | lvalue_expr | func_call_expr
         func_def_expr : FUNC func_def
         """
@@ -610,8 +610,8 @@ class Parser:
         elif self.current_token.type == TokenType.LBRACK:
             expr = self.list_ctor_expr()
             return expr
-        elif self.current_token.type == TokenType.LBRACE:
-            expr = self.map_ctor_expr()
+        elif self.current_token.type == TokenType.LBRACE:       # map set
+            expr = self.map_set_ctor_expr()
             return expr
         elif self.current_token.type == TokenType.FUNC:
             self.eat(TokenType.FUNC)
@@ -620,12 +620,12 @@ class Parser:
                 expr = self.complete_func_call(expr)
             return expr
         else:               # identifier
-            assert(self.current_token.type == TokenType.IDENTIFIER)
-            lve = self.lvalue_expr()
-            if self.current_token.type == TokenType.LPAREN:     # lve()
-                return self.complete_func_call(lve)
-            elif self.current_token.type == TokenType.LBRACK:   # lve[]
-                return lve
+            if self.current_token.type != TokenType.IDENTIFIER:
+                self.error(self.current_token, ErrorInfo.unexpected_token(self.current_token.value, 'IDENTIFIER'))
+            expr = self.lvalue_expr()
+            if self.current_token.type == TokenType.LPAREN:     # expr()
+                return self.complete_func_call(expr)
+            return expr
 
     def list_ctor_expr(self):
         """parse list_ctor_expr
@@ -639,30 +639,41 @@ class Parser:
         self.eat(TokenType.RBRACK)
         return expr
 
-    def map_ctor_expr(self):
-        """parse map_ctor_expr
+    def map_set_ctor_expr(self):
+        """parse map_ctor_expr | set_ctor_expr
 
         map_ctor_expr : LBRACE (expr (COLON expr)? (COMMA expr (COLON expr)?)*)? RBRACE
+        set_ctor_expr : LBRACE expr (COMMA expr)* RBRACE
         """
-        expr = MapCtorExpr(key_exprs=[], value_exprs=[],
-                           position=self.current_token.position)
+        position = self.current_token.position
         self.eat(TokenType.LBRACE)
-        if self.current_token.type != TokenType.RBRACK:
-            expr.key_exprs.append(self.expr())
+        key_exprs=[]
+        value_exprs=[]
+        is_set = False          # default `{}` trait as map
+        if self.current_token.type != TokenType.RBRACE:
+            # determine map or set based on the first pair
+            key_exprs.append(self.expr())
             if self.current_token.type == TokenType.COLON:
+                is_set = False
                 self.eat(TokenType.COLON)
-                expr.value_exprs.append(self.expr())
+                value_exprs.append(self.expr())
             else:
-                expr.value_exprs.append(None)
+                is_set = True
+            # parse remaining content
             while self.current_token.type == TokenType.COMMA:
                 self.eat(TokenType.COMMA)
-                expr.key_exprs.append(self.expr())
-                if self.current_token.type == TokenType.COLON:
+                key_exprs.append(self.expr())
+                if is_set:              # set
+                    # do nothing
+                    pass
+                else:                   # map
                     self.eat(TokenType.COLON)
-                    expr.value_exprs.append(self.expr())
-                else:
-                    expr.value_exprs.append(None)
+                    value_exprs.append(self.expr())
         self.eat(TokenType.RBRACE)
+        if is_set:
+            expr = SetCtorExpr(key_exprs, position)
+        else:
+            expr = MapCtorExpr(key_exprs, value_exprs, position)
         return expr
 
     def lvalue_expr(self):
@@ -672,17 +683,17 @@ class Parser:
         """
         lve = self.name()
         while self.current_token.type in (TokenType.LBRACK, TokenType.DOT):
-            lve = AccessExpr(expr=lve, key_expr=None, dot=False if self.current_token.type == TokenType.DOT else False,
+            lve = AccessExpr(expr=lve, field_expr=None, dot=False if self.current_token.type == TokenType.DOT else False,
                              position=self.current_token.position)
             if self.current_token.type == TokenType.LBRACK:
                 self.eat(TokenType.LBRACK)
                 lve.dot = False
-                lve.key_expr = self.expr()
+                lve.field_expr = self.expr()
                 self.eat(TokenType.RBRACK)
             else:
                 self.eat(TokenType.DOT)
                 lve.dot = True
-                lve.key_expr = String(self.current_token.value, self.current_token.position)
+                lve.field_expr = String(self.current_token.value, self.current_token.position)
                 self.eat(TokenType.IDENTIFIER)
         return lve
 
@@ -716,8 +727,9 @@ class Parser:
         """
         func = FuncDef(param_names=None, vararg=False, body=None,
                        position=self.current_token.position)
+        # func
         self.eat(TokenType.LPAREN)
-        if self.current_token.type != TokenType.LPAREN:
+        if self.current_token.type != TokenType.RPAREN:
             if self.current_token.type != TokenType.VARARG:
                 func.param_names = self.name_list()
             if self.current_token.type == TokenType.COMMA:
@@ -726,6 +738,7 @@ class Parser:
                 self.eat(TokenType.VARARG)
                 func.vararg = True
         self.eat(TokenType.RPAREN)
+        # func body
         self.eat(TokenType.LBRACE)
         func.body = self.stat_list()
         self.eat(TokenType.RBRACE)

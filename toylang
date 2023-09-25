@@ -1,3 +1,15 @@
+# toylang
+
+## TODOLIST
+- built-in functions for each type
+- closure
+- number parser
+- unimplemented functions
+- ...
+
+## GRAMMAR
+
+```
 program             : stat_list
 stat_list           : (stat)+
 stat                : empty_stat
@@ -49,10 +61,11 @@ multiple_expr       : unary_expr ((MUL | DIV | MOD) unary_expr)*
 unary_expr          : (unop)* pow_expr
 pow_expr            : primary_expr (POW primary_expr)*
 primary_expr        : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN |
-                    | list_ctor_expr | map_ctor_expr | func_def_expr |
+                    | list_ctor_expr | map_ctor_expr | set_ctor_expr | func_def_expr |
                     | lvalue_expr | func_call_expr
 list_ctor_expr      : LBRACK (expr_list)? RBRACK
-map_ctor_expr       : LBRACE (expr (COLON expr)? (COMMA expr (COLON expr)?)*)? RBRACE
+map_ctor_expr       : LBRACE (expr COLON expr (COMMA expr COLON expr)*)? RBRACE
+set_ctor_expr       : LBRACE expr (COMMA expr)* RBRACE
 func_def_expr       : FUNC func_def
 lvalue_expr         : name | lvalue_expr LBRACK expr RBRACK | lvalue_expr DOT name
 func_call_expr      : func_call
@@ -70,90 +83,101 @@ compoundassign      : SELF_ADD | SELF_SUB | SELF_MUL | SELF_DIV | SELF_POW | SEL
 unop                : ADD | SUB | NOT | LEN | BNOT
 binop               : ADD | SUB | MUL | DIV | POW | MOD | BSHL | BSHR | BAND | BXOR | BOR
                     | EQ | NE | LT | LE | GT | GE | AND | OR | IN
+```
+
+
+# LEXICAL
+
+```
+IDENTIFIER          : [_a-zA-Z][_a-zA-Z0-9]*
+INT_LITERAL         : [0-9]+
+FLOAT_LITERAL       : [0-9]+\.[0-9]+
+STRING_LITERAL      : '__'  "__"  `__`
 
 # sep
-LPAREN              (
-RPAREN              )
-LBRACK              [
-RBRACK              ]
-LBRACE              {
-RBRACE              }
-COMMA               ,
-DOT                 .
-COLON               :
-SEMI                ;
-QUERY               ?
-VARARG              ...
+LPAREN              : (
+RPAREN              : )
+LBRACK              : [
+RBRACK              : ]
+LBRACE              : {
+RBRACE              : }
+COMMA               : ,
+DOT                 : .
+COLON               : :
+SEMI                : ;
+QUERY               : ?
+VARARG              : ...
 
 # compare
-EQ                  ==
-NE                  !=
-LT                  <
-LE                  <=
-GT                  >
-GE                  >=
+EQ                  : ==
+NE                  : !=
+LT                  : <
+LE                  : <=
+GT                  : >
+GE                  : >=
 
 # cal
-ADD                 +
-SUB                 -
-MUL                 *
-DIV                 /
-POW                 **
-MOD                 %
-BSHL                <<
-BSHR                >>
-BAND                &
-BXOR                ^
-BOR                 |
-BNOT                ~
-LEN                 #
+ADD                 : +
+SUB                 : -
+MUL                 : *
+DIV                 : /
+POW                 : **
+MOD                 : %
+BSHL                : <<
+BSHR                : >>
+BAND                : &
+BXOR                : ^
+BOR                 : |
+BNOT                : ~
+LEN                 : #
 
 # assign
-ASSIGN              =
+ASSIGN              : =
 
 # compoundassign
-SELF_ADD            +=
-SELF_SUB            -=
-SELF_MUL            *=
-SELF_DIV            /=
-SELF_POW            **=
-SELF_MOD            %=
-SELF_BSHL           <<=
-SELF_BSHR           >>=
-SELF_BAND           &=
-SELF_BXOR           ^=
-SELF_BOR            |=
+SELF_ADD            : +=
+SELF_SUB            : -=
+SELF_MUL            : *=
+SELF_DIV            : /=
+SELF_POW            : **=
+SELF_MOD            : %=
+SELF_BSHL           : <<=
+SELF_BSHR           : >>=
+SELF_BAND           : &=
+SELF_BXOR           : ^=
+SELF_BOR            : |=
 
 # keyword
-AND                 and
-NOT                 not
-OR                  or
+AND                 : and
+NOT                 : not
+OR                  : or
 
-IF                  if
-ELIF                elif
-ELSE                else
+IF                  : if
+ELIF                : elif
+ELSE                : else
 
-SWITCH              switch
-CASE                case
-DEFAULT             default
+SWITCH              : switch
+CASE                : case
+DEFAULT             : default
 
-LABEL               label
-GOTO                goto
-BREAK               break
-CONTINUE            continue
+LABEL               : label
+GOTO                : goto
+BREAK               : break
+CONTINUE            : continue
 
-REPEAT              repeat
-UNTIL               until
-WHILE               while
-FOR                 for
-IS                  is
-IN                  in
+REPEAT              : repeat
+UNTIL               : until
+WHILE               : while
+FOR                 : for
+IS                  : is
+IN                  : in
 
-TRUE                true
-FALSE               false
-NULL                null
+TRUE                : true
+FALSE               : false
+NULL                : null
 
-FUNC                func
-RETURN              return
-VAR                 var
-CONST               const
+FUNC                : func
+RETURN              : return
+VAR                 : var
+CONST               : const
+```

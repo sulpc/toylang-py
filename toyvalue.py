@@ -17,12 +17,13 @@ from toytoken import *
 from toyerror import *
 from toyast import FuncDef
 
+
 class Value:
     def __str__(self):
         pass
 
-    def __repr__(self) -> str:
-        return f'{self.__class__.__name__}({self})'
+    def __repr__(self):
+        return self.__str__()
 
     def type(self):
         return f'{self.__class__.__name__[:-5]}'
@@ -60,13 +61,16 @@ class StringValue(Value):
     def __str__(self):
         return self._val
 
+    def __repr__(self):
+        return f"'{str(self._val)}'"
+
 
 class ListValue(Value):
     def __init__(self, _val):
         self._val = _val
 
     def __str__(self):
-        return '[' + ', '.join(f'v' for v in self._val) + ']'
+        return '[' + ', '.join(f'{repr(v)}' for v in self._val) + ']'
 
 
 class MapValue(Value):
@@ -74,7 +78,7 @@ class MapValue(Value):
         self._val = _val
 
     def __str__(self):
-        return '{' + ', '.join(f'{k}: {v}' for k, v in self._val.items()) + '}'
+        return '{' + ', '.join(f'{repr(k)}: {repr(v)}' for k, v in self._val.items()) + '}'
 
 
 class ObjectValue(Value):
@@ -99,11 +103,12 @@ class FunctionValue(Value):
         self.captured = {}
 
         params = ''
-        for name in _ast.param_names:
-            params += name.identifier + ', '
+        if _ast.param_names:
+            for name in _ast.param_names:
+                params += name.identifier + ', '
         if _ast.vararg:
             params += '...'
-        params.strip(', ')
+        params = params.strip(', ')
         self.signature = f'func({params})'
 
     def __str__(self):
@@ -352,6 +357,7 @@ class OpImpl:
             if key in container._val:
                 return container._val[key]
             else:
+                print('container:', container._val)
                 raise MemberAccessError(f'map key({key}) not found')
 
 

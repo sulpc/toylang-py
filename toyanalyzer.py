@@ -259,6 +259,9 @@ class SemanticAnalyzer(AstNodeVistor):
     def visit_MapCtorExpr(self, node: MapCtorExpr):
         raise Exception('TODO: not implement!')
 
+    def visit_SetCtorExpr(self, node: SetCtorExpr):
+        raise Exception('TODO: not implement!')
+
     def visit_AccessExpr(self, node: AccessExpr):
         raise Exception('TODO: not implement!')
 
