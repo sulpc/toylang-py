@@ -148,7 +148,7 @@ class Parser:
             stat.stats.append(self.stat())
 
         if self.current_token.type == TokenType.ELSE:
-            stat.cond_exprs.append(Bool('true', self.current_token.position))    # make `else:` to `elif True`
+            stat.cond_exprs.append(BoolLiteral('true', self.current_token.position))    # make `else:` to `elif True`
             self.eat(TokenType.ELSE)
             if self.current_token.type == TokenType.COLON:
                 self.eat(TokenType.COLON)
@@ -581,25 +581,25 @@ class Parser:
         func_def_expr : FUNC func_def
         """
         if self.current_token.type == TokenType.INT_LITERAL:
-            expr = Num(self.current_token.value, is_int=True,
-                       position=self.current_token.position)
+            expr = NumLiteral(self.current_token.value, is_int=True,
+                              position=self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type == TokenType.FLOAT_LITERAL:
-            expr = Num(self.current_token.value, is_int=False,
-                       position=self.current_token.position)
+            expr = NumLiteral(self.current_token.value, is_int=False,
+                              position=self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type == TokenType.STRING_LITERAL:
-            expr = String(self.current_token.value, self.current_token.position)
+            expr = StringLiteral(self.current_token.value, self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type in (TokenType.TRUE, TokenType.FALSE):
-            expr = Bool(self.current_token.value, self.current_token.position)
+            expr = BoolLiteral(self.current_token.value, self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type == TokenType.NULL:
-            expr = Null(self.current_token.position)
+            expr = NullLiteral(self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type == TokenType.LPAREN:
@@ -693,7 +693,7 @@ class Parser:
             else:
                 self.eat(TokenType.DOT)
                 lve.dot = True
-                lve.field_expr = String(self.current_token.value, self.current_token.position)
+                lve.field_expr = StringLiteral(self.current_token.value, self.current_token.position)
                 self.eat(TokenType.IDENTIFIER)
         return lve
 

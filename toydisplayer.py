@@ -216,19 +216,19 @@ class Displayer(AstNodeVistor):
         data = {'name': f'{node.identifier}'}
         return data
 
-    def visit_Num(self, node: Num):
+    def visit_NumLiteral(self, node: NumLiteral):
         data = {'name': f'<{node.value}>'}
         return data
 
-    def visit_String(self, node: String):
+    def visit_StringLiteral(self, node: StringLiteral):
         data = {'name': f'`{node.value}`'}
         return data
 
-    def visit_Bool(self, node: Bool):
+    def visit_BoolLiteral(self, node: BoolLiteral):
         data = {'name': f'{node.value}'}
         return data
 
-    def visit_Null(self, node: Null):
+    def visit_NullLiteral(self, node: NullLiteral):
         data = {'name': f'null'}
         return data
 

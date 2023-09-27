@@ -98,7 +98,7 @@ class Formator(AstNodeVistor):
 
         if i < len(node.cond_exprs):
             expr = node.cond_exprs[i]
-            if type(expr) == Bool and expr.value == 'true':
+            if type(expr) == BoolLiteral and expr.value == 'true':
                 self.newline()
                 self.indent()
                 self.output('else')
@@ -201,16 +201,16 @@ class Formator(AstNodeVistor):
     def visit_Name(self, node: Name):
         self.output(node.identifier)
 
-    def visit_Num(self, node: Num):
+    def visit_NumLiteral(self, node: NumLiteral):
         self.output(node.value)
 
-    def visit_String(self, node: String):
+    def visit_StringLiteral(self, node: StringLiteral):
         self.output(f"'{node.value}'")
 
-    def visit_Bool(self, node: Bool):
+    def visit_BoolLiteral(self, node: BoolLiteral):
         self.output(node.value)
 
-    def visit_Null(self, node: Null):
+    def visit_NullLiteral(self, node: NullLiteral):
         self.output('null')
 
     def format(self):

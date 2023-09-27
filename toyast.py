@@ -195,26 +195,26 @@ class Name(AST):
         self.position = position
 
 
-class Num(AST):
+class NumLiteral(AST):
     def __init__(self, value, is_int, position):
         self.value = value
         self.is_int = is_int
         self.position = position
 
 
-class String(AST):
+class StringLiteral(AST):
     def __init__(self, value, position):
         self.value = value
         self.position = position
 
 
-class Bool(AST):
+class BoolLiteral(AST):
     def __init__(self, value, position):
         self.value = value
         self.position = position
 
 
-class Null(AST):
+class NullLiteral(AST):
     def __init__(self, position):
         self.position = position
 

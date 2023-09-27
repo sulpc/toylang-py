@@ -269,16 +269,16 @@ class SemanticAnalyzer(AstNodeVistor):
         if self.current_scope.lookup(node.identifier) is None:
             self.error(node.position, ErrorInfo.name_not_declared(node.identifier))
 
-    def visit_Num(self, node: Num):
+    def visit_NumLiteral(self, node: NumLiteral):
         pass
 
-    def visit_String(self, node: String):
+    def visit_StringLiteral(self, node: StringLiteral):
         pass
 
-    def visit_Bool(self, node: Bool):
+    def visit_BoolLiteral(self, node: BoolLiteral):
         pass
 
-    def visit_Null(self, node: Null):
+    def visit_NullLiteral(self, node: NullLiteral):
         pass
 
     def analysis(self):

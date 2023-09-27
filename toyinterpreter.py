@@ -149,20 +149,23 @@ class Interpreter(AstNodeVistor):
         self.exit_ar()
 
     def visit_VarDeclStat(self, node: VarDeclStat):
+        left_num = len(node.names)
+        right_num = len(node.exprs) if node.exprs else 0
+        values = []
+        for i in range(left_num):
+            values.append(self.visit(node.exprs[i]) if i < right_num else NullValue())
         ar = self.call_stack.current_ar
-        for i in range(len(node.names)):
+        for i in range(left_num):
             name = node.names[i]
-            expr = node.exprs[i] if node.exprs and i < len(node.exprs) else None
-            value = self.visit(expr) if expr else NullValue()
             if ar.has(name.identifier):
                 self.error(name.position, ErrorInfo.name_duplicate_declared(name.identifier))
             # create new var
-            ar.set(name.identifier, value, const=node.const)
+            ar.set(name.identifier, values[i], const=node.const)
 
     def visit_IfStat(self, node: IfStat):
         for cond_expr, stat in zip(node.cond_exprs, node.stats):
             try:
-                cond_value = OpImpl.value_to_bool(self.visit(cond_expr))
+                cond_value = OpImpl.convert_to_bool(self.visit(cond_expr))
             except ValueTypeError as e:
                 self.error(cond_expr.position, ErrorInfo.expr_value_error(e.message))
             if cond_value._val:
@@ -199,7 +202,7 @@ class Interpreter(AstNodeVistor):
                 toylog.info(f'[!] {ar.name:<12} handle continue')
                 # do nothing
             try:
-                expr_val = OpImpl.value_to_bool(self.visit(node.expr))
+                expr_val = OpImpl.convert_to_bool(self.visit(node.expr))
             except ValueTypeError as e:
                 self.error(node.expr.position, ErrorInfo.expr_value_error(e.message))
             if expr_val._val:
@@ -211,7 +214,7 @@ class Interpreter(AstNodeVistor):
         self.enter_ar(ar)
         while True:
             try:
-                expr_val = OpImpl.value_to_bool(self.visit(node.expr))
+                expr_val = OpImpl.convert_to_bool(self.visit(node.expr))
             except ValueTypeError as e:
                 self.error(node.expr.position, ErrorInfo.expr_value_error(e.message))
             if expr_val._val:
@@ -236,10 +239,10 @@ class Interpreter(AstNodeVistor):
         ar = ActivationRecord(f'for<{node.position[0]}:{node.position[1]}>', ARType.LOOP)
         # cal start_val, end_val, step_val
         start_val = self.visit(node.start_expr)
-        if not OpImpl.is_num(start_val):
+        if not isinstance(start_val, NumValue):
             self.error(node.start_expr.position, ErrorInfo.expr_type_error('num'))
         end_val = self.visit(node.end_expr)
-        if not OpImpl.is_num(end_val):
+        if not isinstance(end_val, NumValue):
             self.error(node.end_expr.position, ErrorInfo.expr_type_error('num'))
         step_val = self.visit(node.step_expr) if node.step_expr else NumValue(1, is_int=True)
         # create index var
@@ -271,7 +274,36 @@ class Interpreter(AstNodeVistor):
     def visit_ForeachStat(self, node: ForeachStat):
         ar = ActivationRecord(f'for<{node.position[0]}:{node.position[1]}>', ARType.LOOP)
         self.enter_ar(ar)
-        self.error(node.position, 'TODO: foreach')
+        # check value type
+        c = self.visit(node.expr)
+        if type(c) not in (ListValue, MapValue):
+            self.error(node.position, 'TODO: foreach now only support list and map')
+        # loop
+        k = NullValue()
+        while True:
+            # get begin key & value
+            k, v = OpImpl.next(c, k)
+            if type(k) == NullValue:        # travel finish
+                break
+            if node.val_name is not None:
+                ar.set(node.key_name.identifier, k, const=True)
+                ar.set(node.val_name.identifier, v, const=True)
+            else:
+                ar.set(node.key_name.identifier, v, const=True)
+            # do
+            self.visit(node.stat)
+            if ar.state == ARState.RETURNED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} pass return')
+                break
+            elif ar.state == ARState.BREAKED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} handle break')
+                break
+            elif ar.state == ARState.CONTINUED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} handle continue')
+                # do nothing
         self.exit_ar()
 
     def visit_BreakStat(self, node: BreakStat):
@@ -310,12 +342,16 @@ class Interpreter(AstNodeVistor):
         self.error(node.position, ErrorInfo.invalid_syntax('return'))
 
     def visit_AssignStat(self, node: AssignStat):
+        left_num = len(node.left_exprs)
+        right_num = len(node.right_exprs)
+        values = []
+        for i in range(left_num):
+            values.append(self.visit(node.right_exprs[i]) if i < right_num else NullValue())
         for i in range(len(node.left_exprs)):
             left_expr = node.left_exprs[i]
-            right_val = self.visit(node.right_exprs[i]) if i < len(node.right_exprs) else NullValue()
             # name
             if type(left_expr) == Name:
-                self.set_Name(left_expr, right_val)
+                self.set_Name(left_expr, values[i])
             # lvalue_expr LBRACK expr RBRACK | lvalue_expr DOT name
             else:
                 assert(type(left_expr) == AccessExpr)
@@ -325,7 +361,7 @@ class Interpreter(AstNodeVistor):
                 try:
                     OpImpl.set_member(container=c,
                                       key=self.visit(left_expr.field_expr),
-                                      value=right_val)
+                                      value=values[i])
                 except MemberAccessError as e:
                     self.error(left_expr.position, ErrorInfo.general(e.message))
 
@@ -396,7 +432,7 @@ class Interpreter(AstNodeVistor):
 
     def visit_SelectExpr(self, node: SelectExpr):
         try:
-            cond_val = OpImpl.value_to_bool(self.visit(node.cond))
+            cond_val = OpImpl.convert_to_bool(self.visit(node.cond))
         except ValueTypeError as e:
             self.error(node.cond.position, ErrorInfo.expr_value_error(e.message))
         if cond_val._val:
@@ -476,19 +512,19 @@ class Interpreter(AstNodeVistor):
     def visit_Name(self, node: Name):
         return self.get_Name(node)
 
-    def visit_Num(self, node: Num):
+    def visit_NumLiteral(self, node: NumLiteral):
         if node.is_int:
             return NumValue(int(node.value), is_int=True)
         else:
             return NumValue(float(node.value), is_int=False)
 
-    def visit_String(self, node: String):
+    def visit_StringLiteral(self, node: StringLiteral):
         return StringValue(node.value)
 
-    def visit_Bool(self, node: Bool):
+    def visit_BoolLiteral(self, node: BoolLiteral):
         return BoolValue(True if node.value == 'true' else False)
 
-    def visit_Null(self, node: Null):
+    def visit_NullLiteral(self, node: NullLiteral):
         return NullValue()
 
     def set_Name(self, name: Name, value: Value, force=False):
