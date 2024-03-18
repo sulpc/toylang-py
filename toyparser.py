@@ -642,7 +642,7 @@ class Parser:
     def map_set_ctor_expr(self):
         """parse map_ctor_expr | set_ctor_expr
 
-        map_ctor_expr : LBRACE (expr (COLON expr)? (COMMA expr (COLON expr)?)*)? RBRACE
+        map_ctor_expr : LBRACE (expr COLON expr (COMMA expr COLON expr)*)? RBRACE
         set_ctor_expr : LBRACE expr (COMMA expr)* RBRACE
         """
         position = self.current_token.position
@@ -723,7 +723,7 @@ class Parser:
         """parse func_def
 
         func_def   : LPAREN (param_list)? RPAREN LBRACE stat_list RBRACE
-        param_list : name_list [COMMA VARARG] | VARARG
+        param_list : name_list (COMMA VARARG)? | VARARG
         """
         func = FuncDef(param_names=None, vararg=False, body=None,
                        position=self.current_token.position)
@@ -732,11 +732,13 @@ class Parser:
         if self.current_token.type != TokenType.RPAREN:
             if self.current_token.type != TokenType.VARARG:
                 func.param_names = self.name_list()
-            if self.current_token.type == TokenType.COMMA:
-                self.eat(TokenType.COMMA)
-            if self.current_token.type == TokenType.VARARG:
-                self.eat(TokenType.VARARG)
-                func.vararg = True
+
+            # NOTE: bug, conflict to parse `, ...` and `, name`
+            # if self.current_token.type == TokenType.COMMA:   
+            #     self.eat(TokenType.COMMA)
+            # if self.current_token.type == TokenType.VARARG:
+            #     self.eat(TokenType.VARARG)
+            #     func.vararg = True
         self.eat(TokenType.RPAREN)
         # func body
         self.eat(TokenType.LBRACE)

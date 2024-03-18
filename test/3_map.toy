@@ -35,3 +35,8 @@ println(m['f'])
 
 m.f('call m.f')
 m['f']('call m.f')
+
+println('m =', m)
+println('foreach:')
+for k, v in m
+    println(k, v)

@@ -45,7 +45,7 @@ class Lexer:
     def next_token(self):
         """get next token
         """
-        self.skip_writespaces()
+        self.skip_whitespaces()
 
         if self.current_char is None:
             return Token(TokenType.EOF, None, self.position())
@@ -73,7 +73,7 @@ class Lexer:
         # other
         self.error(ErrorInfo.unrecognized_char(self.current_char))
 
-    def skip_writespaces(self):
+    def skip_whitespaces(self):
         while self.current_char is not None:
             if self.current_char.isspace():
                 self.advance()
@@ -114,7 +114,7 @@ class Lexer:
             result += self.current_char
             self.advance()
 
-        if self.current_char != '.':
+        if self.current_char != '.' or self.current_char == None:
             token.type = TokenType.INT_LITERAL
         else:
             result += '.'
