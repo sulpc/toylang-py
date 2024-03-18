@@ -24,8 +24,7 @@ class Lexer:
     def advance(self, n=1):
         """advance n char, refresh current_char
         """
-        if n > self.residual:
-            raise Exception(f'something error')
+        assert(n <= self.residual)
 
         for i in range(n):
             self.col += 1
@@ -46,7 +45,7 @@ class Lexer:
     def next_token(self):
         """get next token
         """
-        self.skip_writespaces()
+        self.skip_whitespaces()
 
         if self.current_char is None:
             return Token(TokenType.EOF, None, self.position())
@@ -74,7 +73,7 @@ class Lexer:
         # other
         self.error(ErrorInfo.unrecognized_char(self.current_char))
 
-    def skip_writespaces(self):
+    def skip_whitespaces(self):
         while self.current_char is not None:
             if self.current_char.isspace():
                 self.advance()
@@ -115,7 +114,7 @@ class Lexer:
             result += self.current_char
             self.advance()
 
-        if self.current_char != '.':
+        if self.current_char != '.' or self.current_char == None:
             token.type = TokenType.INT_LITERAL
         else:
             result += '.'
@@ -145,7 +144,7 @@ class Lexer:
                 self.error(ErrorInfo.literal_string_not_end())
 
             if self.current_char == '\r':
-                self.advance()              # NOTE: '\r' is ignored
+                self.advance()              # '\r' is ignored
                 continue
             if self.current_char == '\\':   # escape
                 result += self.escape()

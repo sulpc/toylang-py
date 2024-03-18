@@ -99,6 +99,12 @@ class ContinueStat(AST):
         self.position = position
 
 
+class ReturnStat(AST):
+    def __init__(self, expr, position):
+        self.expr = expr
+        self.position = position
+
+
 class AssignStat(AST):
     def __init__(self, left_exprs, right_exprs, position):
         self.left_exprs = left_exprs
@@ -111,6 +117,14 @@ class CompoundAssignStat(AST):
         self.operator = operator
         self.left_expr = left_expr
         self.right_expr = right_expr
+        self.position = position
+
+
+class FuncDef(AST):
+    def __init__(self, param_names, vararg, body, position):
+        self.param_names = param_names
+        self.vararg = vararg
+        self.body = body
         self.position = position
 
 
@@ -148,32 +162,59 @@ class UniOpExpr(AST):
         self.position = position
 
 
+class ListCtorExpr(AST):
+    def __init__(self, exprs, position):
+        self.exprs = exprs
+        self.position = position
+
+
+class MapCtorExpr(AST):
+    def __init__(self, key_exprs, value_exprs, position):
+        self.key_exprs = key_exprs
+        self.value_exprs = value_exprs
+        self.position = position
+
+
+class SetCtorExpr(AST):
+    def __init__(self, exprs, position):
+        self.exprs = exprs
+        self.position = position
+
+
+class AccessExpr(AST):
+    def __init__(self, expr, field_expr, dot: bool, position):
+        self.expr = expr
+        self.field_expr = field_expr
+        self.dot = dot
+        self.position = position
+
+
 class Name(AST):
     def __init__(self, identifier, position):
         self.identifier = identifier
         self.position = position
 
 
-class Num(AST):
+class NumLiteral(AST):
     def __init__(self, value, is_int, position):
         self.value = value
         self.is_int = is_int
         self.position = position
 
 
-class String(AST):
+class StringLiteral(AST):
     def __init__(self, value, position):
         self.value = value
         self.position = position
 
 
-class Bool(AST):
+class BoolLiteral(AST):
     def __init__(self, value, position):
         self.value = value
         self.position = position
 
 
-class Null(AST):
+class NullLiteral(AST):
     def __init__(self, position):
         self.position = position
 

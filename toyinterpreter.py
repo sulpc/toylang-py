@@ -38,6 +38,7 @@ class ActivationRecord:
         # below used for function and loop
         self.type = type
         self.state = ARState.NORMAL
+        self.retval = None
 
     def __str__(self) -> str:
         lines = [f'{self.nesting_level}: {self.name} {self.type.value} {self.state.value}']
@@ -68,8 +69,7 @@ class ActivationRecord:
         return key in self.members
 
     def set_values(self, keys, values, const):
-        if len(keys) != len(values):
-            raise Exception(f'keys and values must have same length: {len(keys)} != {len(values)}')
+        assert(len(keys) == len(values))
         for k, v in zip(keys, values):
             self.members[k] = [v, const]
 
@@ -123,12 +123,8 @@ class Interpreter(AstNodeVistor):
         self.call_stack.pop()
 
     def visit_Program(self, node: Program):
-        # ar = ActivationRecord('program')
-        # ar.init_builtins()
-        # self.enter_ar(ar)
         for stat in node.stats:
             self.visit(stat)
-        # self.exit_ar()
 
     def visit_EmptyStat(self, node: EmptyStat):
         pass
@@ -138,7 +134,11 @@ class Interpreter(AstNodeVistor):
         self.enter_ar(ar)
         for stat in node.stats:
             self.visit(stat)
-            if ar.state == ARState.BREAKED:
+            if ar.state == ARState.RETURNED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} pass return')
+                break
+            elif ar.state == ARState.BREAKED:
                 ar.state = ARState.NORMAL
                 toylog.info(f'[!] {ar.name:<12} pass break')
                 break
@@ -149,17 +149,24 @@ class Interpreter(AstNodeVistor):
         self.exit_ar()
 
     def visit_VarDeclStat(self, node: VarDeclStat):
-        for i in range(len(node.names)):
+        left_num = len(node.names)
+        right_num = len(node.exprs) if node.exprs else 0
+        values = []
+        for i in range(left_num):
+            values.append(self.visit(node.exprs[i]) if i < right_num else NullValue())
+        ar = self.call_stack.current_ar
+        for i in range(left_num):
             name = node.names[i]
-            right_expr = node.exprs[i] if node.exprs and i < len(node.exprs) else None
-            self.decl_Name(name, self.visit(right_expr) if right_expr else NullValue(),
-                           const=node.const)
+            if ar.has(name.identifier):
+                self.error(name.position, ErrorInfo.name_duplicate_declared(name.identifier))
+            # create new var
+            ar.set(name.identifier, values[i], const=node.const)
 
     def visit_IfStat(self, node: IfStat):
         for cond_expr, stat in zip(node.cond_exprs, node.stats):
             try:
-                cond_value = OpImpl.value_to_bool(self.visit(cond_expr))
-            except BaseError as e:
+                cond_value = OpImpl.convert_to_bool(self.visit(cond_expr))
+            except ValueTypeError as e:
                 self.error(cond_expr.position, ErrorInfo.expr_value_error(e.message))
             if cond_value._val:
                 self.visit(stat)
@@ -167,13 +174,13 @@ class Interpreter(AstNodeVistor):
 
     def visit_SwitchStat(self, node: SwitchStat):
         switch_val = self.visit(node.expr)
+        # cases
         for case_expr, case_stat in zip(node.case_exprs, node.case_stats):
             case_val = self.visit(case_expr)
-
             if OpImpl.eq(switch_val, case_val)._val:
                 self.visit(case_stat)
                 return
-
+        # default
         if node.default_stat:
             self.visit(node.default_stat)
 
@@ -182,7 +189,11 @@ class Interpreter(AstNodeVistor):
         self.enter_ar(ar)
         while True:
             self.visit(node.stat)
-            if ar.state == ARState.BREAKED:
+            if ar.state == ARState.RETURNED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} pass return')
+                break
+            elif ar.state == ARState.BREAKED:
                 ar.state = ARState.NORMAL
                 toylog.info(f'[!] {ar.name:<12} handle break')
                 break
@@ -191,8 +202,8 @@ class Interpreter(AstNodeVistor):
                 toylog.info(f'[!] {ar.name:<12} handle continue')
                 # do nothing
             try:
-                expr_val = OpImpl.value_to_bool(self.visit(node.expr))
-            except BaseError as e:
+                expr_val = OpImpl.convert_to_bool(self.visit(node.expr))
+            except ValueTypeError as e:
                 self.error(node.expr.position, ErrorInfo.expr_value_error(e.message))
             if expr_val._val:
                 break
@@ -203,12 +214,16 @@ class Interpreter(AstNodeVistor):
         self.enter_ar(ar)
         while True:
             try:
-                expr_val = OpImpl.value_to_bool(self.visit(node.expr))
-            except BaseError as e:
+                expr_val = OpImpl.convert_to_bool(self.visit(node.expr))
+            except ValueTypeError as e:
                 self.error(node.expr.position, ErrorInfo.expr_value_error(e.message))
             if expr_val._val:
                 self.visit(node.stat)
-                if ar.state == ARState.BREAKED:
+                if ar.state == ARState.RETURNED:
+                    ar.state = ARState.NORMAL
+                    toylog.info(f'[!] {ar.name:<12} pass return')
+                    break
+                elif ar.state == ARState.BREAKED:
                     ar.state = ARState.NORMAL
                     toylog.info(f'[!] {ar.name:<12} handle break')
                     break
@@ -222,23 +237,27 @@ class Interpreter(AstNodeVistor):
 
     def visit_ForloopStat(self, node: ForloopStat):
         ar = ActivationRecord(f'for<{node.position[0]}:{node.position[1]}>', ARType.LOOP)
-        self.enter_ar(ar)
         # cal start_val, end_val, step_val
         start_val = self.visit(node.start_expr)
-        if not OpImpl.is_num(start_val):
+        if not isinstance(start_val, NumValue):
             self.error(node.start_expr.position, ErrorInfo.expr_type_error('num'))
         end_val = self.visit(node.end_expr)
-        if not OpImpl.is_num(end_val):
+        if not isinstance(end_val, NumValue):
             self.error(node.end_expr.position, ErrorInfo.expr_type_error('num'))
         step_val = self.visit(node.step_expr) if node.step_expr else NumValue(1, is_int=True)
         # create index var
-        self.decl_Name(node.var_name, start_val, const=True)
-
+        ar.set(node.var_name.identifier, start_val, const=True)
+        # enter loop
+        self.enter_ar(ar)
         while True:
             val = self.visit(node.var_name)
             if OpImpl.lt(val, end_val)._val:
                 self.visit(node.stat)
-                if ar.state == ARState.BREAKED:
+                if ar.state == ARState.RETURNED:
+                    ar.state = ARState.NORMAL
+                    toylog.info(f'[!] {ar.name:<12} pass return')
+                    break
+                elif ar.state == ARState.BREAKED:
                     ar.state = ARState.NORMAL
                     toylog.info(f'[!] {ar.name:<12} handle break')
                     break
@@ -249,13 +268,42 @@ class Interpreter(AstNodeVistor):
                 self.set_Name(node.var_name, OpImpl.add(val, step_val), force=True)
             else:
                 break
-
+        # leave loop
         self.exit_ar()
 
     def visit_ForeachStat(self, node: ForeachStat):
         ar = ActivationRecord(f'for<{node.position[0]}:{node.position[1]}>', ARType.LOOP)
         self.enter_ar(ar)
-        # TODO
+        # check value type
+        c = self.visit(node.expr)
+        if type(c) not in (ListValue, MapValue):
+            self.error(node.position, 'TODO: foreach now only support list and map')
+        # loop
+        k = NullValue()
+        while True:
+            # get begin key & value
+            k, v = OpImpl.next(c, k)
+            if type(k) == NullValue:        # travel finish
+                break
+            if node.val_name is not None:
+                ar.set(node.key_name.identifier, k, const=True)
+                ar.set(node.val_name.identifier, v, const=True)
+            else:
+                ar.set(node.key_name.identifier, v, const=True)
+            # do
+            self.visit(node.stat)
+            if ar.state == ARState.RETURNED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} pass return')
+                break
+            elif ar.state == ARState.BREAKED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} handle break')
+                break
+            elif ar.state == ARState.CONTINUED:
+                ar.state = ARState.NORMAL
+                toylog.info(f'[!] {ar.name:<12} handle continue')
+                # do nothing
         self.exit_ar()
 
     def visit_BreakStat(self, node: BreakStat):
@@ -282,34 +330,60 @@ class Interpreter(AstNodeVistor):
             ar = ar.outer
         self.error(node.position, ErrorInfo.invalid_syntax('continue'))
 
+    def visit_ReturnStat(self, node: ReturnStat):
+        ar = self.call_stack.current_ar
+        while ar is not None:
+            ar.state = ARState.RETURNED
+            toylog.info(f'[!] {ar.name:<12} set return')
+            if ar.type == ARType.FUNCTION:
+                ar.retval = self.visit(node.expr) if node.expr is not None else NullValue()
+                return
+            ar = ar.outer
+        self.error(node.position, ErrorInfo.invalid_syntax('return'))
+
     def visit_AssignStat(self, node: AssignStat):
+        left_num = len(node.left_exprs)
+        right_num = len(node.right_exprs)
+        values = []
+        for i in range(left_num):
+            values.append(self.visit(node.right_exprs[i]) if i < right_num else NullValue())
         for i in range(len(node.left_exprs)):
             left_expr = node.left_exprs[i]
-            right_val = self.visit(node.right_exprs[i]) if i < len(node.right_exprs) else NullValue()
-
-            if type(left_expr) == Name:      # NAME = .*
-                self.set_Name(left_expr, right_val)
-            else:                            # NAME.NAME | NAME[expr]
-                # TODO
-                self.error(node.position, 'TODO: access')
+            # name
+            if type(left_expr) == Name:
+                self.set_Name(left_expr, values[i])
+            # lvalue_expr LBRACK expr RBRACK | lvalue_expr DOT name
+            else:
+                assert(type(left_expr) == AccessExpr)
+                c = self.visit(left_expr.expr)
+                if type(c) not in (ListValue, MapValue):
+                    self.error(left_expr.expr.position, ErrorInfo.general('expr not list or map'))
+                try:
+                    OpImpl.set_member(container=c,
+                                      key=self.visit(left_expr.field_expr),
+                                      value=values[i])
+                except MemberAccessError as e:
+                    self.error(left_expr.position, ErrorInfo.general(e.message))
 
     def visit_CompoundAssignStat(self, node: CompoundAssignStat):
-        left_expr = node.left_expr
-        right_expr = node.right_expr
-        if type(left_expr) == Name:      # NAME += .*
-            if node.operator in BINOP_IMPL_TABLE:
-                try:
-                    new_val = BINOP_IMPL_TABLE[node.operator](self.visit(left_expr), self.visit(right_expr))
-                except BaseError as e:
-                    self.error(node.position, ErrorInfo.expr_value_error(e.message))
-                self.set_Name(left_expr, new_val)
-            else:
-                self.error(node.position, ErrorInfo.op_not_implemented(node.operator.value))
+        left_val = self.visit(node.left_expr)
+        right_val = self.visit(node.right_expr)
+        if node.operator in BINOP_IMPL_TABLE:
+            try:
+                BINOP_IMPL_TABLE[node.operator](left_val, right_val)
+            except ValueTypeError as e:
+                self.error(node.position, ErrorInfo.expr_value_error(e.message))
         else:
-            # TODO
-            self.error(node.position, 'TODO: access')
+            self.error(node.position, ErrorInfo.op_not_implemented(node.operator.value))
+
+    def visit_FuncDef(self, node: FuncDef):
+        return FunctionValue(_ast=node)
 
     def visit_FuncCall(self, node: FuncCall):
+        if type(node.func_expr) == AccessExpr and node.func_expr.dot:
+            # TODO: dot access, like a.func(xxx)
+            pass
+
         func_val = self.visit(node.func_expr)
         if type(func_val) == HostFunctionValue:
             args = []
@@ -318,22 +392,48 @@ class Interpreter(AstNodeVistor):
                     args.append(self.visit(arg_expr))
             try:
                 result = func_val._func(args)
-            except BaseError as e:
+            except ValueTypeError as e:
                 self.error(node.position, ErrorInfo.general(e.message))
 
             if result:
-                assert(type(result) == list)
-                # TODO: when function return multi values
-                return result[0]
+                if isinstance(result, Value):
+                    return result
+                else:
+                    self.error(node.position, ErrorInfo.general("host function return invalid type value"))
             else:
                 return NullValue()
         else:
-            self.error(node.position, "TODO: func call")
+            assert(type(func_val) == FunctionValue)
+            func_ast = func_val._ast
+            ar = ActivationRecord(f'{func_val.signature}<{node.position[0]}:{node.position[1]}>', ARType.FUNCTION)
+            # set args
+            i = 0
+            if func_ast.param_names:
+                while i < len(func_ast.param_names):
+                    identifier = func_ast.param_names[i].identifier
+                    arg_expr = node.arg_exprs[i] if node.arg_exprs and i < len(node.arg_exprs) else None
+                    arg_val = self.visit(arg_expr) if arg_expr else None
+                    ar.set(identifier, arg_val, const=False)
+                    i += 1
+            if func_ast.vararg and i < len(node.arg_exprs):
+                self.error(node.position, "TODO: vararg")
+            # exec func body
+            self.enter_ar(ar)
+            # similar to block
+            for stat in func_ast.body:
+                self.visit(stat)
+                if ar.state == ARState.RETURNED:
+                    ar.state = ARState.NORMAL
+                    toylog.info(f'[!] {ar.name:<12} handle return')
+                    break
+            retval = ar.retval if ar.retval else NullValue()
+            self.exit_ar()
+            return retval
 
     def visit_SelectExpr(self, node: SelectExpr):
         try:
-            cond_val = OpImpl.value_to_bool(self.visit(node.cond))
-        except BaseError as e:
+            cond_val = OpImpl.convert_to_bool(self.visit(node.cond))
+        except ValueTypeError as e:
             self.error(node.cond.position, ErrorInfo.expr_value_error(e.message))
         if cond_val._val:
             return self.visit(node.expr1)
@@ -361,7 +461,7 @@ class Interpreter(AstNodeVistor):
                 result = BINOP_IMPL_TABLE[operator](left_val, right_val)
                 if reverse:    # must be a bool
                     result._val = not result._val
-            except BaseError as e:
+            except ValueTypeError as e:
                 self.error(node.position, ErrorInfo.expr_value_error(e.message))
             return result
         else:
@@ -374,36 +474,58 @@ class Interpreter(AstNodeVistor):
         if node.operator in UNIOP_IMPL_TABLE:
             try:
                 result = UNIOP_IMPL_TABLE[node.operator](expr_value)
-            except BaseError as e:
+            except ValueTypeError as e:
                 self.error(node.position, ErrorInfo.expr_value_error(e.message))
             return result
         else:
             self.error(node.position, ErrorInfo.op_not_implemented(node.operator.value))
 
+    def visit_ListCtorExpr(self, node: ListCtorExpr):
+        value = ListValue(_val=[])
+        if node.exprs:
+            for expr in node.exprs:
+                value._val.append(self.visit(expr))
+        return value
+
+    def visit_MapCtorExpr(self, node: MapCtorExpr):
+        value = MapValue(_val={})
+        for key_expr, value_expr in zip(node.key_exprs, node.value_exprs):
+            key = self.visit(key_expr)
+            OpImpl.set_member(value, key, self.visit(value_expr) if value_expr else NullValue())
+        return value
+
+    def visit_SetCtorExpr(self, node: SetCtorExpr):
+        self.error(node.position, 'TODO: set not implement!')
+
+    def visit_AccessExpr(self, node: AccessExpr):
+        container = self.visit(node.expr)
+        key = self.visit(node.field_expr)
+
+        if type(container) in (ListValue, MapValue):
+            try:
+                return OpImpl.get_member(container, key)
+            except MemberAccessError as e:
+                self.error(node.position, ErrorInfo.general(e.message))
+        else:
+            self.error(node.position, 'TODO: built-in field access not implement!')
+
     def visit_Name(self, node: Name):
         return self.get_Name(node)
 
-    def visit_Num(self, node: Num):
+    def visit_NumLiteral(self, node: NumLiteral):
         if node.is_int:
             return NumValue(int(node.value), is_int=True)
         else:
             return NumValue(float(node.value), is_int=False)
 
-    def visit_String(self, node: String):
+    def visit_StringLiteral(self, node: StringLiteral):
         return StringValue(node.value)
 
-    def visit_Bool(self, node: Bool):
+    def visit_BoolLiteral(self, node: BoolLiteral):
         return BoolValue(True if node.value == 'true' else False)
 
-    def visit_Null(self, node: Null):
+    def visit_NullLiteral(self, node: NullLiteral):
         return NullValue()
-
-    def decl_Name(self, name: Name, value: Value, const: bool):
-        ar = self.call_stack.current_ar
-        identifier = name.identifier
-        if ar.has(identifier):
-            self.error(name.position, ErrorInfo.name_duplicate_declared(identifier))
-        ar.set(identifier, value, const)
 
     def set_Name(self, name: Name, value: Value, force=False):
         '''set value to a name
@@ -434,9 +556,6 @@ class Interpreter(AstNodeVistor):
             else:
                 ar = ar.outer
         self.error(name.position, ErrorInfo.name_not_declared(identifier))
-
-    def set_Field(self, name: Name, field: Value, value: Value):
-        pass
 
     def interpret(self, tree):
         self.visit(tree)
@@ -509,6 +628,7 @@ if __name__ == '__main__':
                 displayer.display()
 
                 interpreter.interpret(tree)
+                print()
             except (LexerError, ParserError, SemanticError, InterpreterError) as e:
                 print(e)
                 # raise e

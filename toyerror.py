@@ -74,36 +74,40 @@ class ErrorInfo:
 
 
 class Error(Exception):
-    def __init__(self, position, message):
-        self.position = position
-        self.message = message
-
-    def __str__(self):
-        return f'{self.__class__.__name__}: <{self.position[0]}:{self.position[1]}>: {self.message}'
-
-    __repr__ = __str__
-
-
-class LexerError(Error):
-    pass
-
-
-class ParserError(Error):
-    pass
-
-
-class SemanticError(Error):
-    pass
-
-
-class InterpreterError(Error):
-    pass
-
-
-class BaseError(Exception):
-    def __init__(self, message):
+    def __init__(self, message=''):
         self.message = message
 
     def __str__(self):
         return self.message
 
+
+class GrammarError(Error):
+    def __init__(self, position, message):
+        self.position = position
+        super().__init__(message)
+
+    def __str__(self):
+        return f'{self.__class__.__name__}: <{self.position[0]}:{self.position[1]}>: {self.message}'
+
+
+class LexerError(GrammarError):
+    pass
+
+
+class ParserError(GrammarError):
+    pass
+
+
+class SemanticError(GrammarError):
+    pass
+
+
+class InterpreterError(GrammarError):
+    pass
+
+
+class ValueTypeError(Error):
+    pass
+
+class MemberAccessError(Error):
+    pass

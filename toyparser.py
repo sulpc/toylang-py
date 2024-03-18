@@ -38,15 +38,10 @@ class Parser:
         stat_list : (stat)+
         """
         result = []
-
-        # while self.current_token.type == TokenType.SEMI:
-        #     self.eat(TokenType.SEMI)
-        #     result.append(self.stat())
         while self.current_token.type not in (TokenType.RBRACE, TokenType.EOF):
             stat = self.stat()
             if type(stat) is not EmptyStat:
                 result.append(stat)
-
         return result
 
     def stat(self):
@@ -63,6 +58,8 @@ class Parser:
              | foreach_stat
              | break_stat
              | continue_stat
+             | func_decl_stat
+             | return_stat
              | assign_stat
              | compoundassign_stat
              | func_call_stat
@@ -87,6 +84,10 @@ class Parser:
             return self.break_stat()
         elif self.current_token.type == TokenType.CONTINUE:
             return self.continue_stat()
+        elif self.current_token.type == TokenType.FUNC:
+            return self.func_prefix_stat()
+        elif self.current_token.type == TokenType.RETURN:
+            return self.return_stat()
         else:                                                   # IDENTIFIER
             return self.identifier_prefix_stat()
 
@@ -130,14 +131,14 @@ class Parser:
 
         if_stat : IF expr (COLON)? stat (ELIF expr (COLON)? stat)* (ELSE (COLON)? stat)?
         """
-        stat = IfStat(cond_exprs=None, stats=None,
+        stat = IfStat(cond_exprs=[], stats=[],
                       position=self.current_token.position)
 
         self.eat(TokenType.IF)
-        stat.cond_exprs = [self.expr()]
+        stat.cond_exprs.append(self.expr())
         if self.current_token.type == TokenType.COLON:
             self.eat(TokenType.COLON)
-        stat.stats = [self.stat()]
+        stat.stats.append(self.stat())
 
         while self.current_token.type == TokenType.ELIF:
             self.eat(TokenType.ELIF)
@@ -147,7 +148,7 @@ class Parser:
             stat.stats.append(self.stat())
 
         if self.current_token.type == TokenType.ELSE:
-            stat.cond_exprs.append(Bool('true', self.current_token.position))    # make `else:` to `elif True`
+            stat.cond_exprs.append(BoolLiteral('true', self.current_token.position))    # make `else:` to `elif True`
             self.eat(TokenType.ELSE)
             if self.current_token.type == TokenType.COLON:
                 self.eat(TokenType.COLON)
@@ -160,14 +161,12 @@ class Parser:
 
         switch_stat : SWITCH expr (COLON)? (CASE expr (COLON)? stat)+ (DEFAULT (COLON)? stat)?
         """
-        stat = SwitchStat(expr=None, case_exprs=None, case_stats=None, default_stat=None,
+        stat = SwitchStat(expr=None, case_exprs=[], case_stats=[], default_stat=None,
                           position=self.current_token.position)
         self.eat(TokenType.SWITCH)
         stat.expr = self.expr()
         if self.current_token.type == TokenType.COLON:
             self.eat(TokenType.COLON)
-        stat.case_exprs = []
-        stat.case_stats = []
 
         if self.current_token.type != TokenType.CASE:
             self.error(self.current_token, ErrorInfo.unexpected_token(self.current_token.value, "case"))
@@ -288,8 +287,41 @@ class Parser:
         self.eat(TokenType.CONTINUE)
         return stat
 
+    def func_prefix_stat(self):
+        """parse func_prefix_stat:
+
+        func_decl_stat: FUNC name func_def  => CONST name = FUNC func_def
+        func_call_stat: func_call
+        func_call     : func_def_expr LPAREN (expr_list)? RPAREN
+        func_def_expr : FUNC func_def
+        """
+        self.eat(TokenType.FUNC)
+        if self.current_token.type == TokenType.IDENTIFIER:
+            # func decl is convert to const var decl
+            name = self.name()
+            func_def = self.func_def()
+            stat = VarDeclStat(names=[name], exprs=[func_def], const=True,
+                               position=self.current_token.position)
+        else:
+            func = self.func_def()
+            stat = self.complete_func_call(func)
+        return stat
+
+    def return_stat(self):
+        """parse return_stat
+
+        return_stat : RETURN (expr | SEMI)
+        """
+        stat = ReturnStat(expr=None, position=self.current_token.position)
+        self.eat(TokenType.RETURN)
+        if self.current_token.type == TokenType.SEMI:
+            self.eat(TokenType.SEMI)
+        else:
+            stat.expr = self.expr()
+        return stat
+
     def identifier_prefix_stat(self):
-        """parse identifier_prefix_stat: assign_stat | compoundassign_stat
+        """parse identifier_prefix_stat
 
         assign_stat         : lvalue_expr (COMMA lvalue_expr)* ASSIGN expr_list
         compoundassign_stat : lvalue_expr compoundassign expr
@@ -300,7 +332,7 @@ class Parser:
         if self.current_token.type in (TokenType.COMMA, TokenType.ASSIGN):
             return self.complete_assign_stat(lve)
         elif self.current_token.type == TokenType.LPAREN:
-            return self.complete_func_call(lve, is_lve=True)
+            return self.complete_func_call(lve)
         else:
             return self.complete_compoundassign_stat(lve)
 
@@ -342,20 +374,17 @@ class Parser:
         else:
             self.error(self.current_token, ErrorInfo.unexpected_token(self.current_token.value, 'compoundassign'))
 
-    def complete_func_call(self, pre, is_lve):
+    def complete_func_call(self, func):
         """complete func_call
 
-        func_call : lvalue_expr LPAREN (expr_list)? RPAREN
+        func_call : lvalue_expr   LPAREN (expr_list)? RPAREN
+                  | func_def_expr LPAREN (expr_list)? RPAREN
         """
-        call = FuncCall(func_expr=None, arg_exprs=None, position=self.current_token.position)
-        if is_lve:
-            call.func_expr = pre
-            self.eat(TokenType.LPAREN)
-            if self.current_token.type != TokenType.RPAREN:
-                call.arg_exprs = self.expr_list()
-            self.eat(TokenType.RPAREN)
-        else:
-            self.error(self.current_token, "TODO: func_call not completed!")
+        call = FuncCall(func_expr=func, arg_exprs=None, position=self.current_token.position)
+        self.eat(TokenType.LPAREN)
+        if self.current_token.type != TokenType.RPAREN:
+            call.arg_exprs = self.expr_list()
+        self.eat(TokenType.RPAREN)
         return call
 
     def expr(self):
@@ -546,29 +575,31 @@ class Parser:
     def primary_expr(self):
         """parse primary_expr
 
-        primary_expr : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN | lvalue_expr
-                     | func_call_expr
+        primary_expr  : INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL | TRUE | FALSE | NULL | LPAREN expr RPAREN
+                      | list_ctor_expr | map_ctor_expr | set_ctor_expr | func_def_expr |
+                      | lvalue_expr | func_call_expr
+        func_def_expr : FUNC func_def
         """
         if self.current_token.type == TokenType.INT_LITERAL:
-            expr = Num(self.current_token.value, is_int=True,
-                       position=self.current_token.position)
+            expr = NumLiteral(self.current_token.value, is_int=True,
+                              position=self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type == TokenType.FLOAT_LITERAL:
-            expr = Num(self.current_token.value, is_int=False,
-                       position=self.current_token.position)
+            expr = NumLiteral(self.current_token.value, is_int=False,
+                              position=self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type == TokenType.STRING_LITERAL:
-            expr = String(self.current_token.value, self.current_token.position)
+            expr = StringLiteral(self.current_token.value, self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type in (TokenType.TRUE, TokenType.FALSE):
-            expr = Bool(self.current_token.value, self.current_token.position)
+            expr = BoolLiteral(self.current_token.value, self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type == TokenType.NULL:
-            expr = Null(self.current_token.position)
+            expr = NullLiteral(self.current_token.position)
             self.eat(self.current_token.type)
             return expr
         elif self.current_token.type == TokenType.LPAREN:
@@ -576,19 +607,95 @@ class Parser:
             expr = self.expr()
             self.eat(TokenType.RPAREN)
             return expr
-        else:
-            lve = self.lvalue_expr()
+        elif self.current_token.type == TokenType.LBRACK:
+            expr = self.list_ctor_expr()
+            return expr
+        elif self.current_token.type == TokenType.LBRACE:       # map set
+            expr = self.map_set_ctor_expr()
+            return expr
+        elif self.current_token.type == TokenType.FUNC:
+            self.eat(TokenType.FUNC)
+            expr = self.func_def()
             if self.current_token.type == TokenType.LPAREN:
-                return self.complete_func_call(lve, is_lve=True)
+                expr = self.complete_func_call(expr)
+            return expr
+        else:               # identifier
+            if self.current_token.type != TokenType.IDENTIFIER:
+                self.error(self.current_token, ErrorInfo.unexpected_token(self.current_token.value, 'IDENTIFIER'))
+            expr = self.lvalue_expr()
+            if self.current_token.type == TokenType.LPAREN:     # expr()
+                return self.complete_func_call(expr)
+            return expr
+
+    def list_ctor_expr(self):
+        """parse list_ctor_expr
+
+        list_ctor_expr : LBRACK (expr_list)? RBRACK
+        """
+        expr = ListCtorExpr(exprs=None, position=self.current_token.position)
+        self.eat(TokenType.LBRACK)
+        if self.current_token.type != TokenType.RBRACK:
+            expr.exprs = self.expr_list()
+        self.eat(TokenType.RBRACK)
+        return expr
+
+    def map_set_ctor_expr(self):
+        """parse map_ctor_expr | set_ctor_expr
+
+        map_ctor_expr : LBRACE (expr COLON expr (COMMA expr COLON expr)*)? RBRACE
+        set_ctor_expr : LBRACE expr (COMMA expr)* RBRACE
+        """
+        position = self.current_token.position
+        self.eat(TokenType.LBRACE)
+        key_exprs=[]
+        value_exprs=[]
+        is_set = False          # default `{}` trait as map
+        if self.current_token.type != TokenType.RBRACE:
+            # determine map or set based on the first pair
+            key_exprs.append(self.expr())
+            if self.current_token.type == TokenType.COLON:
+                is_set = False
+                self.eat(TokenType.COLON)
+                value_exprs.append(self.expr())
             else:
-                return lve
+                is_set = True
+            # parse remaining content
+            while self.current_token.type == TokenType.COMMA:
+                self.eat(TokenType.COMMA)
+                key_exprs.append(self.expr())
+                if is_set:              # set
+                    # do nothing
+                    pass
+                else:                   # map
+                    self.eat(TokenType.COLON)
+                    value_exprs.append(self.expr())
+        self.eat(TokenType.RBRACE)
+        if is_set:
+            expr = SetCtorExpr(key_exprs, position)
+        else:
+            expr = MapCtorExpr(key_exprs, value_exprs, position)
+        return expr
 
     def lvalue_expr(self):
         """parse lvalue_expr
 
-        lvalue_expr : name
+        lvalue_expr : name | lvalue_expr LBRACK expr RBRACK | lvalue_expr DOT name
         """
-        return self.name()
+        lve = self.name()
+        while self.current_token.type in (TokenType.LBRACK, TokenType.DOT):
+            lve = AccessExpr(expr=lve, field_expr=None, dot=False if self.current_token.type == TokenType.DOT else False,
+                             position=self.current_token.position)
+            if self.current_token.type == TokenType.LBRACK:
+                self.eat(TokenType.LBRACK)
+                lve.dot = False
+                lve.field_expr = self.expr()
+                self.eat(TokenType.RBRACK)
+            else:
+                self.eat(TokenType.DOT)
+                lve.dot = True
+                lve.field_expr = StringLiteral(self.current_token.value, self.current_token.position)
+                self.eat(TokenType.IDENTIFIER)
+        return lve
 
     def name_list(self):
         """parse name_list
@@ -611,6 +718,33 @@ class Parser:
             self.eat(TokenType.COMMA)
             exprs.append(self.expr())
         return exprs
+
+    def func_def(self):
+        """parse func_def
+
+        func_def   : LPAREN (param_list)? RPAREN LBRACE stat_list RBRACE
+        param_list : name_list (COMMA VARARG)? | VARARG
+        """
+        func = FuncDef(param_names=None, vararg=False, body=None,
+                       position=self.current_token.position)
+        # func
+        self.eat(TokenType.LPAREN)
+        if self.current_token.type != TokenType.RPAREN:
+            if self.current_token.type != TokenType.VARARG:
+                func.param_names = self.name_list()
+
+            # NOTE: bug, conflict to parse `, ...` and `, name`
+            # if self.current_token.type == TokenType.COMMA:   
+            #     self.eat(TokenType.COMMA)
+            # if self.current_token.type == TokenType.VARARG:
+            #     self.eat(TokenType.VARARG)
+            #     func.vararg = True
+        self.eat(TokenType.RPAREN)
+        # func body
+        self.eat(TokenType.LBRACE)
+        func.body = self.stat_list()
+        self.eat(TokenType.RBRACE)
+        return func
 
     def name(self):
         """parse name
