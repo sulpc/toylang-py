@@ -1,2 +1,5 @@
 # toylang-py
-toylang implement by python.
+
+A simple toylang intepreter implement by python.
+
+Only implement basic functionality, not fully tested, may have many bugs.
